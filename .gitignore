@@ -19,6 +19,10 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.nox/
 
 # Virtual environments
 venv/
@@ -28,28 +32,54 @@ env/
 
 # IDEs
 .idea/
+.vscode/
 *.swp
 *.swo
 *~
+.project
+.pydevproject
 
 # Environment
 .env
 .env.local
+.env.*.local
 
 # Development data
 dev_data/
 
 # Logs
 *.log
+logs/
 
 # Database
 *.db
 *.sqlite
 *.sqlite3
 
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+coverage.xml
+*.cover
+
+# Type checking
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+.pytype/
+
 # OS
 .DS_Store
 Thumbs.db
+*.bak
+*.tmp
 
 # Mantyx specific
 /srv/mantyx/
+temp/
+uploads/
+backups/
+

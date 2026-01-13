@@ -7,11 +7,9 @@ name = "mantyx"
 version = "0.1.0"
 description = "A locally hostable Python app management framework"
 readme = "README.md"
-license = {text = "MIT"}
+license = { text = "MIT" }
 requires-python = ">=3.10"
-authors = [
-    {name = "Mantyx Team"}
-]
+authors = [{ name = "Mantyx Team" }]
 keywords = ["orchestration", "python", "apps", "scheduler", "supervisor"]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -52,6 +50,7 @@ dev = [
     "black>=23.12.0",
     "ruff>=0.1.0",
     "mypy>=1.8.0",
+    "pre-commit>=3.6.0",
 ]
 
 [project.scripts]

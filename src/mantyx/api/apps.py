@@ -72,7 +72,8 @@ async def upload_zip(
         try:
             app_type_enum = AppType[app_type.upper()]
         except KeyError:
-            raise HTTPException(status_code=400, detail=f"Invalid app_type: {app_type}")
+            raise HTTPException(status_code=400,
+                                detail=f"Invalid app_type: {app_type}")
 
         # Create app
         app = app_manager.create_app_from_zip(
@@ -123,7 +124,8 @@ async def upload_git(
         try:
             app_type_enum = AppType[app_type.upper()]
         except KeyError:
-            raise HTTPException(status_code=400, detail=f"Invalid app_type: {app_type}")
+            raise HTTPException(status_code=400,
+                                detail=f"Invalid app_type: {app_type}")
 
         app = app_manager.create_app_from_git(
             git_url,
