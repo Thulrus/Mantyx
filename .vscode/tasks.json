@@ -1,0 +1,445 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Mantyx: Run Development Server",
+            "type": "shell",
+            "command": "${workspaceFolder}/.venv/bin/python",
+            "args": [
+                "-m",
+                "mantyx.cli",
+                "run"
+            ],
+            "options": {
+                "env": {
+                    "MANTYX_BASE_DIR": "${workspaceFolder}/dev_data",
+                    "MANTYX_DEBUG": "true",
+                    "MANTYX_PORT": "8420"
+                }
+            },
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated",
+                "focus": true
+            },
+            "runOptions": {
+                "runOn": "folderOpen"
+            },
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "isBackground": true
+        },
+        {
+            "label": "Mantyx: Install Dependencies",
+            "type": "shell",
+            "command": "${workspaceFolder}/.venv/bin/pip",
+            "args": [
+                "install",
+                "-e",
+                "."
+            ],
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            }
+        },
+        {
+            "label": "Mantyx: Install Dev Dependencies",
+            "type": "shell",
+            "command": "${workspaceFolder}/.venv/bin/pip",
+            "args": [
+                "install",
+                "-e",
+                ".[dev]"
+            ],
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            }
+        },
+        {
+            "label": "Mantyx: Run Production Server",
+            "type": "shell",
+            "command": "${workspaceFolder}/.venv/bin/python",
+            "args": [
+                "-m",
+                "mantyx.cli",
+                "run"
+            ],
+            "options": {
+                "env": {
+                    "MANTYX_BASE_DIR": "/srv/mantyx",
+                    "MANTYX_DEBUG": "false",
+                    "MANTYX_PORT": "8420"
+                }
+            },
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated"
+            },
+            "isBackground": true
+        },
+        {
+            "label": "Mantyx: Check Configuration",
+            "type": "shell",
+            "command": "${workspaceFolder}/.venv/bin/python",
+            "args": [
+                "-m",
+                "mantyx.cli"
+            ],
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            }
+        },
+        {
+            "label": "Mantyx: Test API Health",
+            "type": "shell",
+            "command": "curl",
+            "args": [
+                "-s",
+                "http://localhost:8420/health"
+            ],
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            }
+        },
+        {
+            "label": "Mantyx: Open Web Interface",
+            "type": "shell",
+            "command": "xdg-open",
+            "args": [
+                "http://localhost:8420"
+            ],
+            "windows": {
+                "command": "start",
+                "args": [
+                    "http://localhost:8420"
+                ]
+            },
+            "osx": {
+                "command": "open",
+                "args": [
+                    "http://localhost:8420"
+                ]
+            },
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "never"
+            }
+        },
+        {
+            "label": "Mantyx: Open API Docs",
+            "type": "shell",
+            "command": "xdg-open",
+            "args": [
+                "http://localhost:8420/docs"
+            ],
+            "windows": {
+                "command": "start",
+                "args": [
+                    "http://localhost:8420/docs"
+                ]
+            },
+            "osx": {
+                "command": "open",
+                "args": [
+                    "http://localhost:8420/docs"
+                ]
+            },
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "never"
+            }
+        },
+        {
+            "label": "Mantyx: Format Code (Black)",
+            "type": "shell",
+            "command": "${workspaceFolder}/.venv/bin/black",
+            "args": [
+                "src/mantyx",
+                "examples"
+            ],
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            }
+        },
+        {
+            "label": "Mantyx: Lint Code (Ruff)",
+            "type": "shell",
+            "command": "${workspaceFolder}/.venv/bin/ruff",
+            "args": [
+                "check",
+                "src/mantyx"
+            ],
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            }
+        },
+        {
+            "label": "Mantyx: Type Check (MyPy)",
+            "type": "shell",
+            "command": "${workspaceFolder}/.venv/bin/mypy",
+            "args": [
+                "src/mantyx"
+            ],
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            }
+        },
+        {
+            "label": "Mantyx: Run Tests",
+            "type": "shell",
+            "command": "${workspaceFolder}/.venv/bin/pytest",
+            "args": [
+                "-v"
+            ],
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            },
+            "group": {
+                "kind": "test",
+                "isDefault": true
+            }
+        },
+        {
+            "label": "Mantyx: Run Tests with Coverage",
+            "type": "shell",
+            "command": "${workspaceFolder}/.venv/bin/pytest",
+            "args": [
+                "--cov=mantyx",
+                "--cov-report=html",
+                "--cov-report=term"
+            ],
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            }
+        },
+        {
+            "label": "Mantyx: Clean Dev Data",
+            "type": "shell",
+            "command": "rm",
+            "args": [
+                "-rf",
+                "dev_data"
+            ],
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            }
+        },
+        {
+            "label": "Mantyx: View Dev Logs",
+            "type": "shell",
+            "command": "ls",
+            "args": [
+                "-lah",
+                "dev_data/logs"
+            ],
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            }
+        },
+        {
+            "label": "Mantyx: List Apps (API)",
+            "type": "shell",
+            "command": "curl",
+            "args": [
+                "-s",
+                "http://localhost:8420/api/apps",
+                "|",
+                "${workspaceFolder}/.venv/bin/python",
+                "-m",
+                "json.tool"
+            ],
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            }
+        },
+        {
+            "label": "Mantyx: Package Hello World Example",
+            "type": "shell",
+            "command": "bash",
+            "args": [
+                "-c",
+                "cd examples/hello-world && zip -r ../../hello-world.zip . && cd ../.. && echo 'Created hello-world.zip'"
+            ],
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            }
+        },
+        {
+            "label": "Mantyx: Package Scheduled Report Example",
+            "type": "shell",
+            "command": "bash",
+            "args": [
+                "-c",
+                "cd examples/scheduled-report && zip -r ../../scheduled-report.zip . && cd ../.. && echo 'Created scheduled-report.zip'"
+            ],
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            }
+        },
+        {
+            "label": "Mantyx: Build Distribution",
+            "type": "shell",
+            "command": "${workspaceFolder}/.venv/bin/python",
+            "args": [
+                "-m",
+                "build"
+            ],
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            }
+        },
+        {
+            "label": "Mantyx: Install Systemd Service",
+            "type": "shell",
+            "command": "sudo",
+            "args": [
+                "bash",
+                "-c",
+                "cp mantyx.service /etc/systemd/system/ && systemctl daemon-reload && echo 'Service installed. Enable with: sudo systemctl enable mantyx'"
+            ],
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            }
+        },
+        {
+            "label": "Mantyx: View Service Status",
+            "type": "shell",
+            "command": "sudo",
+            "args": [
+                "systemctl",
+                "status",
+                "mantyx"
+            ],
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            }
+        },
+        {
+            "label": "Mantyx: View Service Logs",
+            "type": "shell",
+            "command": "sudo",
+            "args": [
+                "journalctl",
+                "-u",
+                "mantyx",
+                "-f"
+            ],
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated"
+            },
+            "isBackground": true
+        },
+        {
+            "label": "Mantyx: Create Virtual Environment",
+            "type": "shell",
+            "command": "python3",
+            "args": [
+                "-m",
+                "venv",
+                ".venv"
+            ],
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            }
+        },
+        {
+            "label": "Mantyx: Recreate Virtual Environment",
+            "type": "shell",
+            "command": "bash",
+            "args": [
+                "-c",
+                "rm -rf .venv && python3 -m venv .venv && echo 'Virtual environment recreated. Run Install Dev Dependencies task next.'"
+            ],
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            }
+        },
+        {
+            "label": "Mantyx: Setup Development Environment",
+            "dependsOn": [
+                "Mantyx: Create Virtual Environment",
+                "Mantyx: Install Dev Dependencies",
+                "Mantyx: Clean Dev Data"
+            ],
+            "dependsOrder": "sequence",
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            }
+        },
+        {
+            "label": "Mantyx: Full Quality Check",
+            "dependsOn": [
+                "Mantyx: Format Code (Black)",
+                "Mantyx: Lint Code (Ruff)",
+                "Mantyx: Type Check (MyPy)",
+                "Mantyx: Run Tests"
+            ],
+            "dependsOrder": "sequence",
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            }
+        },
+        {
+            "label": "Mantyx: Quick Start",
+            "dependsOn": [
+                "Mantyx: Setup Development Environment",
+                "Mantyx: Run Development Server",
+                "Mantyx: Open Web Interface"
+            ],
+            "dependsOrder": "sequence",
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated"
+            }
+        }
+    ]
+}

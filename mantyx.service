@@ -1,0 +1,30 @@
+[Unit]
+Description=Mantyx - Python Application Orchestration Framework
+After=network.target
+
+[Service]
+Type=simple
+User=mantyx
+Group=mantyx
+WorkingDirectory=/srv/mantyx
+Environment="MANTYX_BASE_DIR=/srv/mantyx"
+Environment="MANTYX_HOST=0.0.0.0"
+Environment="MANTYX_PORT=8420"
+ExecStart=/usr/bin/python3 -m mantyx.app
+Restart=on-failure
+RestartSec=10
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/srv/mantyx
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=mantyx
+
+[Install]
+WantedBy=multi-user.target

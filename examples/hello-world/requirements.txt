@@ -1,0 +1,4 @@
+# No external dependencies required for this simple example
+# Add your dependencies here, for example:
+# requests>=2.31.0
+# flask>=3.0.0

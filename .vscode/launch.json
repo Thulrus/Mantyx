@@ -1,0 +1,80 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Mantyx: Run Server (Debug)",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "mantyx.cli",
+            "args": [
+                "run"
+            ],
+            "python": "${workspaceFolder}/.venv/bin/python",
+            "env": {
+                "MANTYX_BASE_DIR": "${workspaceFolder}/dev_data",
+                "MANTYX_DEBUG": "true",
+                "MANTYX_PORT": "8420"
+            },
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
+        {
+            "name": "Mantyx: Run Server (Production Mode)",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "mantyx.cli",
+            "args": [
+                "run"
+            ],
+            "python": "${workspaceFolder}/.venv/bin/python",
+            "env": {
+                "MANTYX_BASE_DIR": "${workspaceFolder}/dev_data",
+                "MANTYX_DEBUG": "false",
+                "MANTYX_PORT": "8420"
+            },
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
+            "name": "Python: Current File",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "python": "${workspaceFolder}/.venv/bin/python",
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
+        {
+            "name": "Mantyx: Test App Manager",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "pytest",
+            "args": [
+                "tests/test_app_manager.py",
+                "-v",
+                "-s"
+            ],
+            "python": "${workspaceFolder}/.venv/bin/python",
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
+        {
+            "name": "Mantyx: Run Example Hello World",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/examples/hello-world/main.py",
+            "python": "${workspaceFolder}/.venv/bin/python",
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
+        {
+            "name": "Mantyx: Run Example Scheduled Report",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/examples/scheduled-report/main.py",
+            "python": "${workspaceFolder}/.venv/bin/python",
+            "console": "integratedTerminal",
+            "justMyCode": false
+        }
+    ]
+}
