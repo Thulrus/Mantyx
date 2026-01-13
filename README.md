@@ -8,6 +8,10 @@
 
 Mantyx is a single-node orchestration system designed to run on trusted home servers. It provides a complete solution for managing multiple Python applications with dependency isolation, process supervision, scheduling, and a web-based control interface.
 
+The idea came about when I had a bunch of small python scripts that I wanted to run at certain times of the day, and a few that I wanted running all the time. I decided to develop a framework that I could host locally that would take care of the scheduling, handle dependencies, manage the different scripts, and give me a web UI so that I could see what was going on.
+
+It isn't complete yet, but it's slowly getting better.
+
 ---
 
 ## Features
@@ -436,7 +440,3 @@ MIT License - see LICENSE file for details
 - [ ] Metrics and alerting
 - [ ] Backup/restore functionality
 - [ ] App templates
-
----
-
-**Made with ❤️ for Python developers who want simple, powerful app orchestration.**
