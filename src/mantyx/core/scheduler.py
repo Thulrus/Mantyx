@@ -66,7 +66,7 @@ def execute_scheduled_app(app_id: int, schedule_id: int | None) -> None:
             app_name = app.name
             app_entrypoint = app.entrypoint
             app_environment = app.environment
-            
+
             # For scheduled runs, validate schedule exists
             if schedule_id is not None:
                 schedule = session.query(Schedule).filter(
