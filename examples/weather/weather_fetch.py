@@ -171,18 +171,18 @@ def format_message(weather):
     else:
         headline = "A pretty typical day overall."
 
-    wind = "" if wind == 0 else (f"💨 **Wind**\n"
+    wind = "" if wind == 0 else (f"💨 Wind\n"
                                  f"Up to {wind:.0f} mph\n\n")
 
-    rain = "" if precip_prob == 0 else (f"🌧️ **Rain**\n"
+    rain = "" if precip_prob == 0 else (f"🌧️ Rain\n"
                                         f"Chance: {precip_prob}%\n"
                                         f"Expected: {precip_sum:.2f} in\n\n")
 
-    message = (f"{sky_emoji} **Good morning!**\n"
+    message = (f"{sky_emoji} Good morning!\n"
                f"{headline}\n\n"
-               f"📅 **{date_str}**\n"
+               f"📅 {date_str}\n"
                f"{conditions}\n\n"
-               f"🌡️ **Temperatures**\n"
+               f"🌡️ Temperatures\n"
                f"High: {temp_high:.0f}°F\n"
                f"Low: {temp_low:.0f}°F\n\n"
                f"{wind}"
