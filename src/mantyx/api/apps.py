@@ -13,7 +13,7 @@ from mantyx.api.schemas import AppCreate, AppResponse, AppStatusResponse, AppUpd
 from mantyx.config import get_settings
 from mantyx.core.app_manager import AppManager
 from mantyx.database import get_db_session
-from mantyx.models.app import App, AppType
+from mantyx.models.app import App, AppState, AppType
 
 router = APIRouter(prefix="/apps", tags=["apps"])
 
@@ -161,6 +161,21 @@ async def upload_git(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("/{app_id}/install")
+def install_app(
+        app_id: int,
+        app_manager: AppManager = Depends(get_app_manager),
+):
+    """Install an app's dependencies."""
+    try:
+        app_manager.install_app(app_id)
+        return {"message": "App installed successfully"}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/{app_id}/enable")
 def enable_app(
         app_id: int,
@@ -247,6 +262,37 @@ def restart_app(
         return {"message": "App restarted successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/{app_id}/run")
+def run_scheduled_app(
+        app_id: int,
+        db: Session = Depends(get_db_session),
+):
+    """Run a scheduled app immediately."""
+    import threading
+
+    from mantyx.core.scheduler import execute_scheduled_app
+
+    app = db.query(App).filter(App.id == app_id).first()
+    if not app:
+        raise HTTPException(status_code=404, detail="App not found")
+
+    if app.app_type != AppType.SCHEDULED:
+        raise HTTPException(status_code=400,
+                            detail="App is not a scheduled app")
+
+    if app.state not in (AppState.ENABLED, AppState.STOPPED,
+                         AppState.INSTALLED, AppState.DISABLED):
+        raise HTTPException(status_code=400,
+                            detail=f"Cannot run app in state: {app.state}")
+
+    # Run in background thread to not block API response
+    thread = threading.Thread(target=execute_scheduled_app,
+                              args=(app_id, None))
+    thread.start()
+
+    return {"message": "App execution started"}
 
 
 @router.delete("/{app_id}")
