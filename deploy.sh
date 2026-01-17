@@ -4,26 +4,56 @@
 
 set -e
 
-# Configuration - require arguments
-if [ -z "$1" ] || [ -z "$2" ]; then
-    echo "Error: Missing required arguments"
+# Load deployment configuration if it exists
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DEPLOY_CONFIG="${SCRIPT_DIR}/.deploy.env"
+
+if [ -f "$DEPLOY_CONFIG" ]; then
+    # Source the config file
+    source "$DEPLOY_CONFIG"
+    
+    # Use config values as defaults if arguments not provided
+    REMOTE_TARGET="${1:-$DEPLOY_TARGET}"
+    REMOTE_PATH="${2:-$DEPLOY_PATH}"
+    SERVICE_NAME="${DEPLOY_SERVICE:-mantyx}"
+else
+    # No config file - require arguments
+    REMOTE_TARGET="$1"
+    REMOTE_PATH="$2"
+    SERVICE_NAME="mantyx"
+fi
+
+# Validate we have the required values
+if [ -z "$REMOTE_TARGET" ] || [ -z "$REMOTE_PATH" ]; then
+    echo "Error: Missing required configuration"
     echo ""
-    echo "Usage: $0 HOST PATH"
+    echo "Option 1: Create a .deploy.env file (recommended)"
+    echo "  cp .deploy.env.example .deploy.env"
+    echo "  # Edit .deploy.env with your server details"
+    echo "  $0"
+    echo ""
+    echo "Option 2: Pass arguments directly"
+    echo "  $0 USER@HOST PATH"
     echo ""
     echo "Arguments:"
-    echo "  HOST    Remote server IP/hostname"
-    echo "  PATH    Installation path on remote server"
+    echo "  USER@HOST   Remote server (user@hostname or user@IP)"
+    echo "  PATH        Installation path on remote server"
     echo ""
     echo "Examples:"
-    echo "  $0 192.168.1.100 /home/user/mantyx"
-    echo "  $0 server.local /opt/mantyx"
+    echo "  $0 user@192.168.1.100 /home/user/mantyx"
+    echo "  $0 admin@server.local /opt/mantyx"
     exit 1
 fi
 
-REMOTE_HOST="$1"
-REMOTE_PATH="$2"
-REMOTE_USER=$(echo "$REMOTE_PATH" | cut -d'/' -f3)  # Extract user from path
-SERVICE_NAME="mantyx"
+# Parse user@host
+if [[ "$REMOTE_TARGET" == *"@"* ]]; then
+    REMOTE_USER="${REMOTE_TARGET%%@*}"
+    REMOTE_HOST="${REMOTE_TARGET##*@}"
+else
+    # If no @ symbol, assume current user
+    REMOTE_USER="$USER"
+    REMOTE_HOST="$REMOTE_TARGET"
+fi
 
 # Colors
 RED='\033[0;31m'
@@ -50,15 +80,23 @@ log_error() {
 }
 
 show_usage() {
-    echo "Usage: $0 HOST PATH"
+    echo "Mantyx Deployment Script"
+    echo ""
+    echo "Option 1: Use config file (recommended)"
+    echo "  cp .deploy.env.example .deploy.env"
+    echo "  # Edit .deploy.env with your server details"
+    echo "  $0"
+    echo ""
+    echo "Option 2: Pass arguments directly"
+    echo "  $0 USER@HOST PATH"
     echo ""
     echo "Arguments:"
-    echo "  HOST    Remote server IP/hostname"
-    echo "  PATH    Installation path on remote server"
+    echo "  USER@HOST   Remote server (user@hostname or user@IP)"
+    echo "  PATH        Installation path on remote server"
     echo ""
     echo "Examples:"
-    echo "  $0 192.168.1.100 /home/user/mantyx"
-    echo "  $0 server.local /opt/mantyx"
+    echo "  $0 user@192.168.1.100 /home/user/mantyx"
+    echo "  $0 admin@server.local /opt/mantyx"
 }
 
 check_ssh() {

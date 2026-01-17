@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -135,14 +135,58 @@
                   name="schedule_type"
                   onchange="toggleScheduleInputs('zip')"
                 >
-                  <option value="interval" selected>
-                    Interval (Every X minutes/hours)
+                  <option value="simple_daily" selected>
+                    Daily at specific time
                   </option>
-                  <option value="cron">Cron Expression (Advanced)</option>
+                  <option value="simple_weekly">Weekly on specific day</option>
+                  <option value="interval">Every X minutes/hours</option>
+                  <option value="cron">Advanced (Cron Expression)</option>
                 </select>
               </div>
 
-              <div id="zipIntervalFields">
+              <!-- Simple Daily Schedule -->
+              <div id="zipDailyFields">
+                <div class="form-group">
+                  <label for="zipDailyTime">Time (24-hour format)</label>
+                  <input
+                    type="time"
+                    id="zipDailyTime"
+                    name="daily_time"
+                    value="07:00"
+                  />
+                  <small id="zipTimezoneInfo" class="timezone-info"
+                    >Your server timezone will be used</small
+                  >
+                </div>
+              </div>
+
+              <!-- Simple Weekly Schedule -->
+              <div id="zipWeeklyFields" style="display: none">
+                <div class="form-group">
+                  <label for="zipWeekDay">Day of Week</label>
+                  <select id="zipWeekDay" name="week_day">
+                    <option value="0">Monday</option>
+                    <option value="1">Tuesday</option>
+                    <option value="2">Wednesday</option>
+                    <option value="3">Thursday</option>
+                    <option value="4">Friday</option>
+                    <option value="5">Saturday</option>
+                    <option value="6">Sunday</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label for="zipWeeklyTime">Time (24-hour format)</label>
+                  <input
+                    type="time"
+                    id="zipWeeklyTime"
+                    name="weekly_time"
+                    value="07:00"
+                  />
+                </div>
+              </div>
+
+              <!-- Interval Schedule -->
+              <div id="zipIntervalFields" style="display: none">
                 <div class="form-group">
                   <label for="zipIntervalValue">Interval Value</label>
                   <input
@@ -163,6 +207,7 @@
                 </div>
               </div>
 
+              <!-- Cron Expression (Advanced) -->
               <div id="zipCronFields" style="display: none">
                 <div class="form-group">
                   <label for="zipCronExpression">Cron Expression</label>
@@ -170,11 +215,14 @@
                     type="text"
                     id="zipCronExpression"
                     name="cron_expression"
-                    placeholder="0 * * * *"
+                    placeholder="0 7 * * *"
                   />
                   <small
-                    >Format: minute hour day month day_of_week (e.g., "0 * * *
-                    *" = every hour)</small
+                    >Format: minute hour day month day_of_week<br />
+                    Examples:<br />
+                    • "0 7 * * *" = Every day at 7:00 AM<br />
+                    • "30 14 * * 1" = Every Monday at 2:30 PM<br />
+                    • "0 */6 * * *" = Every 6 hours</small
                   >
                 </div>
               </div>
@@ -272,14 +320,58 @@
                   name="schedule_type"
                   onchange="toggleScheduleInputs('git')"
                 >
-                  <option value="interval" selected>
-                    Interval (Every X minutes/hours)
+                  <option value="simple_daily" selected>
+                    Daily at specific time
                   </option>
-                  <option value="cron">Cron Expression (Advanced)</option>
+                  <option value="simple_weekly">Weekly on specific day</option>
+                  <option value="interval">Every X minutes/hours</option>
+                  <option value="cron">Advanced (Cron Expression)</option>
                 </select>
               </div>
 
-              <div id="gitIntervalFields">
+              <!-- Simple Daily Schedule -->
+              <div id="gitDailyFields">
+                <div class="form-group">
+                  <label for="gitDailyTime">Time (24-hour format)</label>
+                  <input
+                    type="time"
+                    id="gitDailyTime"
+                    name="daily_time"
+                    value="07:00"
+                  />
+                  <small id="gitTimezoneInfo" class="timezone-info"
+                    >Your server timezone will be used</small
+                  >
+                </div>
+              </div>
+
+              <!-- Simple Weekly Schedule -->
+              <div id="gitWeeklyFields" style="display: none">
+                <div class="form-group">
+                  <label for="gitWeekDay">Day of Week</label>
+                  <select id="gitWeekDay" name="week_day">
+                    <option value="0">Monday</option>
+                    <option value="1">Tuesday</option>
+                    <option value="2">Wednesday</option>
+                    <option value="3">Thursday</option>
+                    <option value="4">Friday</option>
+                    <option value="5">Saturday</option>
+                    <option value="6">Sunday</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label for="gitWeeklyTime">Time (24-hour format)</label>
+                  <input
+                    type="time"
+                    id="gitWeeklyTime"
+                    name="weekly_time"
+                    value="07:00"
+                  />
+                </div>
+              </div>
+
+              <!-- Interval Schedule -->
+              <div id="gitIntervalFields" style="display: none">
                 <div class="form-group">
                   <label for="gitIntervalValue">Interval Value</label>
                   <input
@@ -300,6 +392,7 @@
                 </div>
               </div>
 
+              <!-- Cron Expression (Advanced) -->
               <div id="gitCronFields" style="display: none">
                 <div class="form-group">
                   <label for="gitCronExpression">Cron Expression</label>
@@ -307,11 +400,14 @@
                     type="text"
                     id="gitCronExpression"
                     name="cron_expression"
-                    placeholder="0 * * * *"
+                    placeholder="0 7 * * *"
                   />
                   <small
-                    >Format: minute hour day month day_of_week (e.g., "0 * * *
-                    *" = every hour)</small
+                    >Format: minute hour day month day_of_week<br />
+                    Examples:<br />
+                    • "0 7 * * *" = Every day at 7:00 AM<br />
+                    • "30 14 * * 1" = Every Monday at 2:30 PM<br />
+                    • "0 */6 * * *" = Every 6 hours</small
                   >
                 </div>
               </div>
@@ -392,14 +488,58 @@
               required
               onchange="toggleScheduleTypeFields()"
             >
-              <option value="interval" selected>
-                Interval (Every X minutes/hours)
+              <option value="simple_daily" selected>
+                Daily at specific time
               </option>
-              <option value="cron">Cron Expression (Advanced)</option>
+              <option value="simple_weekly">Weekly on specific day</option>
+              <option value="interval">Every X minutes/hours</option>
+              <option value="cron">Advanced (Cron Expression)</option>
             </select>
           </div>
 
-          <div id="intervalFieldsModal">
+          <!-- Simple Daily Schedule -->
+          <div id="dailyFieldsModal">
+            <div class="form-group">
+              <label for="dailyTime">Time (24-hour format)</label>
+              <input
+                type="time"
+                id="dailyTime"
+                name="daily_time"
+                value="07:00"
+              />
+              <small id="modalTimezoneInfo" class="timezone-info"
+                >Your server timezone will be used</small
+              >
+            </div>
+          </div>
+
+          <!-- Simple Weekly Schedule -->
+          <div id="weeklyFieldsModal" style="display: none">
+            <div class="form-group">
+              <label for="weekDay">Day of Week</label>
+              <select id="weekDay" name="week_day">
+                <option value="0">Monday</option>
+                <option value="1">Tuesday</option>
+                <option value="2">Wednesday</option>
+                <option value="3">Thursday</option>
+                <option value="4">Friday</option>
+                <option value="5">Saturday</option>
+                <option value="6">Sunday</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="weeklyTime">Time (24-hour format)</label>
+              <input
+                type="time"
+                id="weeklyTime"
+                name="weekly_time"
+                value="07:00"
+              />
+            </div>
+          </div>
+
+          <!-- Interval Schedule -->
+          <div id="intervalFieldsModal" style="display: none">
             <div class="form-group">
               <label for="intervalValue">Interval Value</label>
               <input
@@ -420,6 +560,7 @@
             </div>
           </div>
 
+          <!-- Cron Expression (Advanced) -->
           <div id="cronFieldsModal" style="display: none">
             <div class="form-group">
               <label for="cronExpression">Cron Expression</label>
@@ -427,12 +568,14 @@
                 type="text"
                 id="cronExpression"
                 name="cron_expression"
-                placeholder="0 * * * *"
+                placeholder="0 7 * * *"
               />
               <small
                 >Format: minute hour day month day_of_week<br />
-                Examples: "0 * * * *" (hourly), "0 0 * * *" (daily at midnight),
-                "0 9 * * 1-5" (weekdays at 9am)</small
+                Examples:<br />
+                • "0 7 * * *" = Every day at 7:00 AM<br />
+                • "30 14 * * 1" = Every Monday at 2:30 PM<br />
+                • "0 */6 * * *" = Every 6 hours</small
               >
             </div>
           </div>

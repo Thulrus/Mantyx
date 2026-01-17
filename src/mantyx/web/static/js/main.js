@@ -6,10 +6,12 @@ const API_BASE = "/api";
 // State
 let apps = [];
 let currentAppId = null;
+let systemTimezone = "UTC";
 
 // Initialize
 document.addEventListener("DOMContentLoaded", () => {
   initializeEventListeners();
+  loadSystemInfo();
   loadApps();
 
   // Auto-refresh every 5 seconds
@@ -77,17 +79,29 @@ function toggleScheduleFields(formType) {
   }
 }
 
-// Toggle between interval and cron inputs
+// Toggle between different schedule input types
 function toggleScheduleInputs(formType) {
   const scheduleTypeSelect = document.getElementById(`${formType}ScheduleType`);
+  const dailyFields = document.getElementById(`${formType}DailyFields`);
+  const weeklyFields = document.getElementById(`${formType}WeeklyFields`);
   const intervalFields = document.getElementById(`${formType}IntervalFields`);
   const cronFields = document.getElementById(`${formType}CronFields`);
 
-  if (scheduleTypeSelect.value === "interval") {
+  // Hide all first
+  dailyFields.style.display = "none";
+  weeklyFields.style.display = "none";
+  intervalFields.style.display = "none";
+  cronFields.style.display = "none";
+
+  // Show the selected one
+  const scheduleType = scheduleTypeSelect.value;
+  if (scheduleType === "simple_daily") {
+    dailyFields.style.display = "block";
+  } else if (scheduleType === "simple_weekly") {
+    weeklyFields.style.display = "block";
+  } else if (scheduleType === "interval") {
     intervalFields.style.display = "block";
-    cronFields.style.display = "none";
-  } else {
-    intervalFields.style.display = "none";
+  } else if (scheduleType === "cron") {
     cronFields.style.display = "block";
   }
 }
@@ -95,14 +109,25 @@ function toggleScheduleInputs(formType) {
 // Toggle schedule type in schedule modal
 function toggleScheduleTypeFields() {
   const scheduleType = document.getElementById("scheduleType").value;
+  const dailyFields = document.getElementById("dailyFieldsModal");
+  const weeklyFields = document.getElementById("weeklyFieldsModal");
   const intervalFields = document.getElementById("intervalFieldsModal");
   const cronFields = document.getElementById("cronFieldsModal");
 
-  if (scheduleType === "interval") {
+  // Hide all first
+  dailyFields.style.display = "none";
+  weeklyFields.style.display = "none";
+  intervalFields.style.display = "none";
+  cronFields.style.display = "none";
+
+  // Show the selected one
+  if (scheduleType === "simple_daily") {
+    dailyFields.style.display = "block";
+  } else if (scheduleType === "simple_weekly") {
+    weeklyFields.style.display = "block";
+  } else if (scheduleType === "interval") {
     intervalFields.style.display = "block";
-    cronFields.style.display = "none";
-  } else {
-    intervalFields.style.display = "none";
+  } else if (scheduleType === "cron") {
     cronFields.style.display = "block";
   }
 }
@@ -163,6 +188,22 @@ async function loadApps() {
     updateStats();
   } catch (error) {
     console.error("Failed to load apps:", error);
+  }
+}
+
+// Load System Info
+async function loadSystemInfo() {
+  try {
+    const info = await apiCall("/system/info");
+    systemTimezone = info.timezone;
+
+    // Update all timezone display elements
+    const timezoneInfoElements = document.querySelectorAll(".timezone-info");
+    timezoneInfoElements.forEach((el) => {
+      el.textContent = `Times are in ${systemTimezone} timezone`;
+    });
+  } catch (error) {
+    console.error("Failed to load system info:", error);
   }
 }
 
@@ -233,7 +274,7 @@ function renderApps() {
                 ${getAppActions(app)}
             </div>
         </div>
-    `
+    `,
     )
     .join("");
 }
@@ -245,7 +286,7 @@ function getAppActions(app) {
   // State-specific actions
   if (app.state === "UPLOADED" || app.state === "uploaded") {
     actions.push(
-      `<button class="btn btn-success btn-small" onclick="installApp(${app.id})">Install</button>`
+      `<button class="btn btn-success btn-small" onclick="installApp(${app.id})">Install</button>`,
     );
   }
 
@@ -256,7 +297,7 @@ function getAppActions(app) {
     app.state === "disabled"
   ) {
     actions.push(
-      `<button class="btn btn-success btn-small" onclick="enableApp(${app.id})">Enable</button>`
+      `<button class="btn btn-success btn-small" onclick="enableApp(${app.id})">Enable</button>`,
     );
   }
 
@@ -269,7 +310,7 @@ function getAppActions(app) {
     app.state === "stopped"
   ) {
     actions.push(
-      `<button class="btn btn-warning btn-small" onclick="disableApp(${app.id})">Disable</button>`
+      `<button class="btn btn-warning btn-small" onclick="disableApp(${app.id})">Disable</button>`,
     );
   }
 
@@ -277,10 +318,10 @@ function getAppActions(app) {
   if (app.app_type === "PERPETUAL" || app.app_type === "perpetual") {
     if (app.state === "RUNNING" || app.state === "running") {
       actions.push(
-        `<button class="btn btn-warning btn-small" onclick="stopApp(${app.id})">Stop</button>`
+        `<button class="btn btn-warning btn-small" onclick="stopApp(${app.id})">Stop</button>`,
       );
       actions.push(
-        `<button class="btn btn-secondary btn-small" onclick="restartApp(${app.id})">Restart</button>`
+        `<button class="btn btn-secondary btn-small" onclick="restartApp(${app.id})">Restart</button>`,
       );
     } else if (
       app.state === "ENABLED" ||
@@ -291,7 +332,7 @@ function getAppActions(app) {
       app.state === "failed"
     ) {
       actions.push(
-        `<button class="btn btn-success btn-small" onclick="startApp(${app.id})">Start</button>`
+        `<button class="btn btn-success btn-small" onclick="startApp(${app.id})">Start</button>`,
       );
     }
   }
@@ -299,7 +340,7 @@ function getAppActions(app) {
   // Scheduled app controls
   if (app.app_type === "SCHEDULED" || app.app_type === "scheduled") {
     actions.push(
-      `<button class="btn btn-secondary btn-small" onclick="manageSchedule(${app.id})">⏰ Schedule</button>`
+      `<button class="btn btn-secondary btn-small" onclick="manageSchedule(${app.id})">⏰ Schedule</button>`,
     );
     // Run now button for testing
     if (
@@ -313,14 +354,14 @@ function getAppActions(app) {
       app.state === "disabled"
     ) {
       actions.push(
-        `<button class="btn btn-success btn-small" onclick="runScheduledApp(${app.id})">▶ Run Now</button>`
+        `<button class="btn btn-success btn-small" onclick="runScheduledApp(${app.id})">▶ Run Now</button>`,
       );
     }
   }
 
   // Delete
   actions.push(
-    `<button class="btn btn-danger btn-small" onclick="deleteApp(${app.id})">Delete</button>`
+    `<button class="btn btn-danger btn-small" onclick="deleteApp(${app.id})">Delete</button>`,
   );
 
   return actions.join("");
@@ -331,7 +372,7 @@ function updateStats() {
   const total = apps.length;
   const running = apps.filter((a) => a.state === "running").length;
   const enabled = apps.filter(
-    (a) => a.state === "enabled" || a.state === "running"
+    (a) => a.state === "enabled" || a.state === "running",
   ).length;
   const failed = apps.filter((a) => a.state === "failed").length;
 
@@ -418,7 +459,7 @@ async function runScheduledApp(appId) {
 async function deleteApp(appId) {
   if (
     confirm(
-      "Are you sure you want to delete this app? This action cannot be undone."
+      "Are you sure you want to delete this app? This action cannot be undone.",
     )
   ) {
     try {
@@ -500,31 +541,46 @@ async function handleGitUpload(e) {
 
 // Create schedule from upload form data
 async function createScheduleFromUpload(appId, formData, formType) {
-  const scheduleType = formData.get("schedule_type") || "interval";
+  const scheduleType = formData.get("schedule_type") || "simple_daily";
   let scheduleName = formData.get("schedule_name") || "Default Schedule";
 
   const scheduleData = {
     app_id: appId,
     name: scheduleName,
-    schedule_type: scheduleType,
-    timezone: "UTC",
     is_enabled: true,
   };
 
-  if (scheduleType === "interval") {
+  // Convert simple schedule types to cron or interval
+  if (scheduleType === "simple_daily") {
+    // Daily at specific time - convert to cron
+    const time = formData.get("daily_time") || "07:00";
+    const [hour, minute] = time.split(":");
+    scheduleData.schedule_type = "cron";
+    scheduleData.cron_expression = `${minute} ${hour} * * *`;
+  } else if (scheduleType === "simple_weekly") {
+    // Weekly on specific day - convert to cron
+    const time = formData.get("weekly_time") || "07:00";
+    const [hour, minute] = time.split(":");
+    const dayOfWeek = formData.get("week_day") || "0";
+    scheduleData.schedule_type = "cron";
+    scheduleData.cron_expression = `${minute} ${hour} * * ${dayOfWeek}`;
+  } else if (scheduleType === "interval") {
+    // Interval - convert to seconds
     const intervalValue = parseInt(formData.get("interval_value") || "5");
     const intervalUnit = formData.get("interval_unit") || "minutes";
 
-    // Convert to seconds
     let seconds = intervalValue;
     if (intervalUnit === "minutes") seconds *= 60;
     else if (intervalUnit === "hours") seconds *= 3600;
     else if (intervalUnit === "days") seconds *= 86400;
 
+    scheduleData.schedule_type = "interval";
     scheduleData.interval_seconds = seconds;
-  } else {
+  } else if (scheduleType === "cron") {
+    // Advanced cron expression
+    scheduleData.schedule_type = "cron";
     scheduleData.cron_expression =
-      formData.get("cron_expression") || "0 * * * *";
+      formData.get("cron_expression") || "0 7 * * *";
   }
 
   try {
@@ -624,7 +680,7 @@ async function showAppDetails(appId) {
                         ${
                           exec.started_at
                             ? `<div><strong>Started:</strong> ${new Date(
-                                exec.started_at
+                                exec.started_at,
                               ).toLocaleString()}</div>`
                             : ""
                         }
@@ -634,7 +690,7 @@ async function showAppDetails(appId) {
                             : ""
                         }
                     </div>
-                `
+                `,
                   )
                   .join("")}
             </div>
@@ -653,19 +709,19 @@ async function showAppDetails(appId) {
                 (sched) => `
                 <div style="background: var(--bg-tertiary); padding: 0.8rem; margin: 0.5rem 0; border-radius: 4px;">
                     <div><strong>${sched.name}</strong> - ${
-                  sched.schedule_type
-                } ${sched.is_enabled ? "✓" : "✗"}</div>
+                      sched.schedule_type
+                    } ${sched.is_enabled ? "✓" : "✗"}</div>
                     <div>${
                       sched.cron_expression ||
                       `Every ${formatInterval(sched.interval_seconds)}`
                     }</div>
                     <div>Run count: ${sched.run_count} | Last: ${
-                  sched.last_run
-                    ? new Date(sched.last_run).toLocaleString()
-                    : "Never"
-                }</div>
+                      sched.last_run
+                        ? new Date(sched.last_run).toLocaleString()
+                        : "Never"
+                    }</div>
                 </div>
-            `
+            `,
               )
               .join("")}
         </div>
@@ -738,9 +794,8 @@ async function manageSchedule(appId) {
       "Create Schedule";
     document.getElementById("scheduleForm").reset();
     document.getElementById("scheduleId").value = "";
-    document.getElementById(
-      "scheduleName"
-    ).value = `${app.display_name} Schedule`;
+    document.getElementById("scheduleName").value =
+      `${app.display_name} Schedule`;
     toggleScheduleTypeFields();
   }
 
@@ -761,12 +816,25 @@ async function handleScheduleSubmit(e) {
     app_id: parseInt(appId),
     name: formData.get("name"),
     description: formData.get("description") || null,
-    schedule_type: scheduleType,
-    timezone: "UTC",
     is_enabled: document.getElementById("scheduleEnabled").checked,
   };
 
-  if (scheduleType === "interval") {
+  // Convert simple schedule types to cron or interval
+  if (scheduleType === "simple_daily") {
+    // Daily at specific time - convert to cron
+    const time = formData.get("daily_time") || "07:00";
+    const [hour, minute] = time.split(":");
+    scheduleData.schedule_type = "cron";
+    scheduleData.cron_expression = `${minute} ${hour} * * *`;
+  } else if (scheduleType === "simple_weekly") {
+    // Weekly on specific day - convert to cron
+    const time = formData.get("weekly_time") || "07:00";
+    const [hour, minute] = time.split(":");
+    const dayOfWeek = formData.get("week_day") || "0";
+    scheduleData.schedule_type = "cron";
+    scheduleData.cron_expression = `${minute} ${hour} * * ${dayOfWeek}`;
+  } else if (scheduleType === "interval") {
+    // Interval - convert to seconds
     const intervalValue = parseInt(formData.get("interval_value"));
     const intervalUnit = formData.get("interval_unit");
 
@@ -775,8 +843,11 @@ async function handleScheduleSubmit(e) {
     else if (intervalUnit === "hours") seconds *= 3600;
     else if (intervalUnit === "days") seconds *= 86400;
 
+    scheduleData.schedule_type = "interval";
     scheduleData.interval_seconds = seconds;
-  } else {
+  } else if (scheduleType === "cron") {
+    // Advanced cron expression
+    scheduleData.schedule_type = "cron";
     scheduleData.cron_expression = formData.get("cron_expression");
   }
 

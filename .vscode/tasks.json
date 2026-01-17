@@ -117,10 +117,7 @@
             "label": "Mantyx: Deploy to Server",
             "type": "shell",
             "command": "${workspaceFolder}/deploy.sh",
-            "args": [
-                "YOUR_SERVER_IP",
-                "/path/to/mantyx"
-            ],
+            "args": [],
             "problemMatcher": [],
             "presentation": {
                 "reveal": "always",

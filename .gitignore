@@ -44,6 +44,9 @@ env/
 .env.local
 .env.*.local
 
+# Deployment secrets
+.deploy.env
+
 # Development data
 dev_data/
 

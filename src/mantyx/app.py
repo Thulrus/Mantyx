@@ -127,6 +127,16 @@ async def health():
     }
 
 
+@app.get("/api/system/info")
+async def system_info():
+    """Get system information."""
+    settings = get_settings()
+    return {
+        "timezone": settings.timezone,
+        "version": "0.1.0",
+    }
+
+
 def run():
     """Run the application."""
     import uvicorn

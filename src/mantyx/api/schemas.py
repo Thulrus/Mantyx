@@ -12,6 +12,12 @@ from mantyx.models.execution import ExecutionStatus
 from mantyx.models.log import LogLevel
 
 
+def get_default_timezone() -> str:
+    """Get default timezone from settings."""
+    from mantyx.config import get_settings
+    return get_settings().timezone
+
+
 # App schemas
 class AppBase(BaseModel):
     display_name: str
@@ -49,7 +55,7 @@ class AppUpdate(BaseModel):
 
 class AppResponse(AppBase):
     model_config = ConfigDict(from_attributes=True)
-    
+
     id: int
     name: str
     state: AppState
@@ -75,7 +81,7 @@ class ScheduleBase(BaseModel):
     schedule_type: str
     cron_expression: Optional[str] = None
     interval_seconds: Optional[int] = None
-    timezone: str = "UTC"
+    timezone: str = Field(default_factory=get_default_timezone)
     timeout_seconds: Optional[int] = None
     misfire_grace_time: int = 60
     coalesce: bool = True
@@ -97,7 +103,7 @@ class ScheduleUpdate(BaseModel):
 
 class ScheduleResponse(ScheduleBase):
     model_config = ConfigDict(from_attributes=True)
-    
+
     id: int
     app_id: int
     is_enabled: bool
@@ -111,7 +117,7 @@ class ScheduleResponse(ScheduleBase):
 # Execution schemas
 class ExecutionResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
-    
+
     id: int
     app_id: int
     status: ExecutionStatus
@@ -129,7 +135,7 @@ class ExecutionResponse(BaseModel):
 # Log schemas
 class LogEntryResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
-    
+
     id: int
     app_id: Optional[int] = None
     timestamp: datetime

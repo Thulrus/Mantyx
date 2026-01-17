@@ -14,6 +14,12 @@ if TYPE_CHECKING:
     from mantyx.models.app import App
 
 
+def get_default_timezone() -> str:
+    """Get default timezone from settings."""
+    from mantyx.config import get_settings
+    return get_settings().timezone
+
+
 class Schedule(Base, TimestampMixin):
     """
     Represents a schedule configuration for a scheduled app.
@@ -21,12 +27,14 @@ class Schedule(Base, TimestampMixin):
     Supports cron expressions and interval-based scheduling.
     Each app can have multiple schedules.
     """
-    
+
     __tablename__ = "schedules"
-    
+
     # Primary key
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    
+    id: Mapped[int] = mapped_column(Integer,
+                                    primary_key=True,
+                                    autoincrement=True)
+
     # Foreign key to app
     app_id: Mapped[int] = mapped_column(
         Integer,
@@ -34,26 +42,29 @@ class Schedule(Base, TimestampMixin):
         nullable=False,
         index=True,
     )
-    
+
     # Schedule identification
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    
+
     # Schedule type: "cron" or "interval"
     schedule_type: Mapped[str] = mapped_column(String(50), nullable=False)
-    
+
     # Cron expression (if type is "cron")
-    cron_expression: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
-    
+    cron_expression: Mapped[Optional[str]] = mapped_column(String(100),
+                                                           nullable=True)
+
     # Interval settings (if type is "interval")
-    interval_seconds: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    
+    interval_seconds: Mapped[Optional[int]] = mapped_column(Integer,
+                                                            nullable=True)
+
     # Timezone for schedule evaluation
-    timezone: Mapped[str] = mapped_column(String(50), default="UTC")
-    
+    timezone: Mapped[str] = mapped_column(String(50),
+                                          default=get_default_timezone)
+
     # State
     is_enabled: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
-    
+
     # Execution tracking
     last_run: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True),
@@ -64,20 +75,21 @@ class Schedule(Base, TimestampMixin):
         nullable=True,
     )
     run_count: Mapped[int] = mapped_column(Integer, default=0)
-    
+
     # Timeout settings
-    timeout_seconds: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    
+    timeout_seconds: Mapped[Optional[int]] = mapped_column(Integer,
+                                                           nullable=True)
+
     # Misfire handling
     misfire_grace_time: Mapped[int] = mapped_column(Integer, default=60)
     coalesce: Mapped[bool] = mapped_column(Boolean, default=True)
-    
+
     # Relationship
     app: Mapped["App"] = relationship("App", back_populates="schedules")
-    
+
     def __repr__(self) -> str:
         return f"<Schedule(id={self.id}, app_id={self.app_id}, name='{self.name}')>"
-    
+
     @property
     def schedule_display(self) -> str:
         """Get human-readable schedule description."""
