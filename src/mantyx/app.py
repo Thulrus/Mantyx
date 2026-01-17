@@ -11,7 +11,7 @@ from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
-from mantyx.api import apps, executions, schedules
+from mantyx.api import apps, executions, schedules, settings
 from mantyx.config import get_settings
 from mantyx.core.app_manager import AppManager
 from mantyx.core.scheduler import AppScheduler
@@ -90,6 +90,7 @@ app = FastAPI(
 app.include_router(apps.router, prefix="/api")
 app.include_router(executions.router, prefix="/api")
 app.include_router(schedules.router, prefix="/api")
+app.include_router(settings.router, prefix="/api")
 
 # Serve static files (web UI)
 static_dir = Path(__file__).parent / "web" / "static"

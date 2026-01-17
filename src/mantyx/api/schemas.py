@@ -13,9 +13,24 @@ from mantyx.models.log import LogLevel
 
 
 def get_default_timezone() -> str:
-    """Get default timezone from settings."""
-    from mantyx.config import get_settings
-    return get_settings().timezone
+    """Get default timezone from settings or system detection."""
+    # Try to get from database settings first
+    try:
+        from mantyx.database import get_db
+        from mantyx.models.setting import Setting
+
+        with get_db() as session:
+            setting = session.query(Setting).filter(
+                Setting.key == "timezone").first()
+            if setting:
+                return setting.value
+    except Exception:
+        # Database might not be initialized yet
+        pass
+
+    # Fall back to system timezone
+    from mantyx.config import get_system_timezone
+    return get_system_timezone()
 
 
 # App schemas

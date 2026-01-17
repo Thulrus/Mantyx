@@ -7,6 +7,7 @@ Uses APScheduler to manage cron and interval-based job execution.
 import traceback
 from datetime import datetime
 from typing import Optional
+from zoneinfo import ZoneInfo
 
 from apscheduler.executors.pool import ThreadPoolExecutor
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
@@ -33,7 +34,8 @@ def execute_scheduled_app(app_id: int, schedule_id: int | None) -> None:
     trigger_details = f"schedule_id={schedule_id}" if schedule_id else "manual execution"
 
     logger.info(
-        f"Executing scheduled app: app_id={app_id}, schedule_id={schedule_id}")
+        f"🎯 SCHEDULER TRIGGERED: Executing scheduled app: app_id={app_id}, schedule_id={schedule_id}, time={datetime.now()}"
+    )
 
     settings = get_settings()
     venv_manager = VenvManager()
@@ -204,7 +206,12 @@ class AppScheduler:
             logger.warning("Scheduler is already running")
             return
 
-        logger.info("Starting scheduler")
+        logger.info("⚙️  Starting scheduler...")
+
+        # Get system timezone
+        from mantyx.config import get_system_timezone
+        system_tz = get_system_timezone()
+        logger.info(f"📍 Scheduler timezone: {system_tz}")
 
         jobstores = {
             'default':
@@ -223,13 +230,15 @@ class AppScheduler:
             jobstores=jobstores,
             executors=executors,
             job_defaults=job_defaults,
+            timezone=system_tz,
         )
 
         # Load existing schedules
         self._load_schedules()
 
         self._scheduler.start()
-        logger.info("Scheduler started")
+        logger.info("✅ Scheduler started successfully")
+        logger.info(f"📅 Loaded {len(self._scheduler.get_jobs())} jobs")
 
     def stop(self) -> None:
         """Stop the scheduler."""
@@ -264,16 +273,50 @@ class AppScheduler:
         if schedule.schedule_type == "cron":
             if not schedule.cron_expression:
                 raise ValueError("Cron expression required for cron schedule")
-            trigger = CronTrigger.from_crontab(
-                schedule.cron_expression,
-                timezone=schedule.timezone,
+
+            logger.info(
+                f"Creating cron trigger: expression='{schedule.cron_expression}', timezone='{schedule.timezone}' (using scheduler timezone)",
+                app_id=schedule.app_id,
+            )
+
+            # Parse cron expression (format: "minute hour day month day_of_week")
+            # NOTE: Do NOT pass timezone to CronTrigger - it will use the scheduler's timezone
+            # Passing timezone causes APScheduler to interpret the hour as UTC instead of local time
+            parts = schedule.cron_expression.split()
+            if len(parts) != 5:
+                raise ValueError(
+                    f"Invalid cron expression: {schedule.cron_expression}")
+
+            minute, hour, day, month, day_of_week = parts
+
+            trigger = CronTrigger(
+                minute=minute,
+                hour=hour,
+                day=day,
+                month=month,
+                day_of_week=day_of_week,
+                # Don't set timezone here - inherit from scheduler
+            )
+
+            # Log the next run time for debugging
+            tz = ZoneInfo(schedule.timezone)
+            next_run = trigger.get_next_fire_time(None, datetime.now(tz))
+            logger.info(
+                f"Trigger created - Next run will be: {next_run}",
+                app_id=schedule.app_id,
             )
         elif schedule.schedule_type == "interval":
             if not schedule.interval_seconds:
                 raise ValueError("Interval required for interval schedule")
+
+            logger.info(
+                f"Creating interval trigger: seconds={schedule.interval_seconds}, timezone='{schedule.timezone}' (using scheduler timezone)",
+                app_id=schedule.app_id,
+            )
+
             trigger = IntervalTrigger(
                 seconds=schedule.interval_seconds,
-                timezone=schedule.timezone,
+                # Don't set timezone here - inherit from scheduler
             )
         else:
             raise ValueError(
@@ -291,8 +334,12 @@ class AppScheduler:
             replace_existing=True,
         )
 
+        # Get next run time
+        job = self._scheduler.get_job(job_id)
+        next_run = job.next_run_time if job else None
+
         logger.info(
-            f"Added schedule {schedule.name} for app {schedule.app.name}",
+            f"Added schedule '{schedule.name}' for app '{schedule.app.name}' - Next run: {next_run}",
             app_id=schedule.app_id,
         )
 
@@ -327,3 +374,53 @@ class AppScheduler:
         if job:
             job.resume()
             logger.info(f"Resumed schedule {schedule_id}")
+
+    def get_scheduler_status(self) -> dict:
+        """Get detailed scheduler status for debugging."""
+        if not self._scheduler:
+            return {"running": False, "error": "Scheduler not initialized"}
+
+        from mantyx.config import get_system_timezone
+        system_tz = get_system_timezone()
+        tz = ZoneInfo(system_tz)
+        current_time = datetime.now(tz)
+
+        jobs_info = []
+        for job in self._scheduler.get_jobs():
+            # Get next run time and convert to local timezone if needed
+            next_run = job.next_run_time
+            next_run_local = None
+            if next_run:
+                # Ensure next_run has timezone info
+                if next_run.tzinfo is None:
+                    # If naive, assume it's in scheduler's timezone
+                    next_run = next_run.replace(tzinfo=tz)
+                next_run_local = next_run.astimezone(tz)
+
+            job_info = {
+                "id":
+                job.id,
+                "name":
+                job.name,
+                "next_run_time":
+                next_run.isoformat() if next_run else None,
+                "next_run_time_local":
+                next_run_local.isoformat() if next_run_local else None,
+                "trigger":
+                str(job.trigger),
+            }
+            jobs_info.append(job_info)
+
+        return {
+            "running":
+            self._scheduler.running,
+            "num_jobs":
+            len(jobs_info),
+            "jobs":
+            jobs_info,
+            "scheduler_timezone":
+            str(self._scheduler.timezone)
+            if hasattr(self._scheduler, 'timezone') else "unknown",
+            "current_time":
+            current_time.isoformat(),
+        }

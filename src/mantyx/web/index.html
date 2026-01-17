@@ -19,6 +19,9 @@
             <button id="uploadBtn" class="btn btn-primary">
               <span>📤</span> Upload App
             </button>
+            <button id="settingsBtn" class="btn btn-secondary">
+              <span>⚙️</span> Settings
+            </button>
             <button id="refreshBtn" class="btn btn-secondary">
               <span>🔄</span> Refresh
             </button>
@@ -28,6 +31,42 @@
 
       <!-- Main Content -->
       <main>
+        <!-- System Info Bar -->
+        <div class="system-info-bar">
+          <div class="system-info-item">
+            <span class="info-label">Current Time:</span>
+            <span id="currentTime" class="info-value">--:--:--</span>
+          </div>
+          <div class="system-info-item">
+            <span class="info-label">Timezone:</span>
+            <span id="currentTimezone" class="info-value">Loading...</span>
+          </div>
+          <div class="system-info-item">
+            <button
+              class="btn btn-secondary btn-sm"
+              onclick="toggleSchedulerDebug()"
+            >
+              🐛 Scheduler Debug
+            </button>
+          </div>
+        </div>
+
+        <!-- Scheduler Debug Panel (Hidden by default) -->
+        <div id="schedulerDebugPanel" class="debug-panel" style="display: none">
+          <div class="debug-header">
+            <h3>Scheduler Status</h3>
+            <button
+              class="btn btn-secondary btn-sm"
+              onclick="refreshSchedulerDebug()"
+            >
+              🔄 Refresh
+            </button>
+          </div>
+          <div id="schedulerDebugContent">
+            <p>Loading scheduler information...</p>
+          </div>
+        </div>
+
         <!-- Stats Cards -->
         <div class="stats-grid">
           <div class="stat-card">
@@ -139,6 +178,9 @@
                     Daily at specific time
                   </option>
                   <option value="simple_weekly">Weekly on specific day</option>
+                  <option value="simple_multi_weekly">
+                    Multiple days per week
+                  </option>
                   <option value="interval">Every X minutes/hours</option>
                   <option value="cron">Advanced (Cron Expression)</option>
                 </select>
@@ -180,6 +222,52 @@
                     type="time"
                     id="zipWeeklyTime"
                     name="weekly_time"
+                    value="07:00"
+                  />
+                </div>
+              </div>
+
+              <!-- Multi-Day Weekly Schedule -->
+              <div id="zipMultiWeeklyFields" style="display: none">
+                <div class="form-group">
+                  <label>Select Days</label>
+                  <div class="day-checkboxes">
+                    <label class="day-checkbox">
+                      <input type="checkbox" name="multi_week_days" value="1" />
+                      <span>Mon</span>
+                    </label>
+                    <label class="day-checkbox">
+                      <input type="checkbox" name="multi_week_days" value="2" />
+                      <span>Tue</span>
+                    </label>
+                    <label class="day-checkbox">
+                      <input type="checkbox" name="multi_week_days" value="3" />
+                      <span>Wed</span>
+                    </label>
+                    <label class="day-checkbox">
+                      <input type="checkbox" name="multi_week_days" value="4" />
+                      <span>Thu</span>
+                    </label>
+                    <label class="day-checkbox">
+                      <input type="checkbox" name="multi_week_days" value="5" />
+                      <span>Fri</span>
+                    </label>
+                    <label class="day-checkbox">
+                      <input type="checkbox" name="multi_week_days" value="6" />
+                      <span>Sat</span>
+                    </label>
+                    <label class="day-checkbox">
+                      <input type="checkbox" name="multi_week_days" value="0" />
+                      <span>Sun</span>
+                    </label>
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label for="zipMultiWeeklyTime">Time (24-hour format)</label>
+                  <input
+                    type="time"
+                    id="zipMultiWeeklyTime"
+                    name="multi_weekly_time"
                     value="07:00"
                   />
                 </div>
@@ -324,6 +412,9 @@
                     Daily at specific time
                   </option>
                   <option value="simple_weekly">Weekly on specific day</option>
+                  <option value="simple_multi_weekly">
+                    Multiple days per week
+                  </option>
                   <option value="interval">Every X minutes/hours</option>
                   <option value="cron">Advanced (Cron Expression)</option>
                 </select>
@@ -365,6 +456,52 @@
                     type="time"
                     id="gitWeeklyTime"
                     name="weekly_time"
+                    value="07:00"
+                  />
+                </div>
+              </div>
+
+              <!-- Multi-Day Weekly Schedule -->
+              <div id="gitMultiWeeklyFields" style="display: none">
+                <div class="form-group">
+                  <label>Select Days</label>
+                  <div class="day-checkboxes">
+                    <label class="day-checkbox">
+                      <input type="checkbox" name="multi_week_days" value="1" />
+                      <span>Mon</span>
+                    </label>
+                    <label class="day-checkbox">
+                      <input type="checkbox" name="multi_week_days" value="2" />
+                      <span>Tue</span>
+                    </label>
+                    <label class="day-checkbox">
+                      <input type="checkbox" name="multi_week_days" value="3" />
+                      <span>Wed</span>
+                    </label>
+                    <label class="day-checkbox">
+                      <input type="checkbox" name="multi_week_days" value="4" />
+                      <span>Thu</span>
+                    </label>
+                    <label class="day-checkbox">
+                      <input type="checkbox" name="multi_week_days" value="5" />
+                      <span>Fri</span>
+                    </label>
+                    <label class="day-checkbox">
+                      <input type="checkbox" name="multi_week_days" value="6" />
+                      <span>Sat</span>
+                    </label>
+                    <label class="day-checkbox">
+                      <input type="checkbox" name="multi_week_days" value="0" />
+                      <span>Sun</span>
+                    </label>
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label for="gitMultiWeeklyTime">Time (24-hour format)</label>
+                  <input
+                    type="time"
+                    id="gitMultiWeeklyTime"
+                    name="multi_weekly_time"
                     value="07:00"
                   />
                 </div>
@@ -492,6 +629,9 @@
                 Daily at specific time
               </option>
               <option value="simple_weekly">Weekly on specific day</option>
+              <option value="simple_multi_weekly">
+                Multiple days per week
+              </option>
               <option value="interval">Every X minutes/hours</option>
               <option value="cron">Advanced (Cron Expression)</option>
             </select>
@@ -533,6 +673,52 @@
                 type="time"
                 id="weeklyTime"
                 name="weekly_time"
+                value="07:00"
+              />
+            </div>
+          </div>
+
+          <!-- Multi-Day Weekly Schedule -->
+          <div id="multiWeeklyFieldsModal" style="display: none">
+            <div class="form-group">
+              <label>Select Days</label>
+              <div class="day-checkboxes">
+                <label class="day-checkbox">
+                  <input type="checkbox" name="multi_week_days" value="1" />
+                  <span>Mon</span>
+                </label>
+                <label class="day-checkbox">
+                  <input type="checkbox" name="multi_week_days" value="2" />
+                  <span>Tue</span>
+                </label>
+                <label class="day-checkbox">
+                  <input type="checkbox" name="multi_week_days" value="3" />
+                  <span>Wed</span>
+                </label>
+                <label class="day-checkbox">
+                  <input type="checkbox" name="multi_week_days" value="4" />
+                  <span>Thu</span>
+                </label>
+                <label class="day-checkbox">
+                  <input type="checkbox" name="multi_week_days" value="5" />
+                  <span>Fri</span>
+                </label>
+                <label class="day-checkbox">
+                  <input type="checkbox" name="multi_week_days" value="6" />
+                  <span>Sat</span>
+                </label>
+                <label class="day-checkbox">
+                  <input type="checkbox" name="multi_week_days" value="0" />
+                  <span>Sun</span>
+                </label>
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="multiWeeklyTime">Time (24-hour format)</label>
+              <input
+                type="time"
+                id="multiWeeklyTime"
+                name="multi_weekly_time"
                 value="07:00"
               />
             </div>
@@ -606,6 +792,37 @@
       </div>
     </div>
 
-    <script src="/static/js/main.js?v=4"></script>
+    <!-- Settings Modal -->
+    <div id="settingsModal" class="modal">
+      <div class="modal-content">
+        <span class="close">&times;</span>
+        <h2>System Settings</h2>
+        <form id="settingsForm">
+          <div class="form-group">
+            <label for="timezoneSelect">Timezone</label>
+            <select id="timezoneSelect" name="timezone" required>
+              <option value="">Loading timezones...</option>
+            </select>
+            <small>
+              All scheduled tasks will run in this timezone.<br />
+              Detected system timezone: <span id="detectedTimezone">...</span>
+            </small>
+          </div>
+
+          <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Save Settings</button>
+            <button
+              type="button"
+              class="btn btn-secondary"
+              onclick="closeModal('settingsModal')"
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <script src="/static/js/main.js?v=5"></script>
   </body>
 </html>

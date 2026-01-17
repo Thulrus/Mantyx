@@ -16,6 +16,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Auto-refresh every 5 seconds
   setInterval(loadApps, 5000);
+
+  // Update clock every second
+  updateClock();
+  setInterval(updateClock, 1000);
 });
 
 // Event Listeners
@@ -23,6 +27,11 @@ function initializeEventListeners() {
   // Upload button
   document.getElementById("uploadBtn").addEventListener("click", () => {
     openModal("uploadModal");
+  });
+
+  // Settings button
+  document.getElementById("settingsBtn").addEventListener("click", () => {
+    openSettingsModal();
   });
 
   // Refresh button
@@ -65,6 +74,9 @@ function initializeEventListeners() {
   document
     .getElementById("scheduleForm")
     .addEventListener("submit", handleScheduleSubmit);
+  document
+    .getElementById("settingsForm")
+    .addEventListener("submit", handleSettingsSubmit);
 }
 
 // Toggle schedule fields in upload forms
@@ -84,12 +96,16 @@ function toggleScheduleInputs(formType) {
   const scheduleTypeSelect = document.getElementById(`${formType}ScheduleType`);
   const dailyFields = document.getElementById(`${formType}DailyFields`);
   const weeklyFields = document.getElementById(`${formType}WeeklyFields`);
+  const multiWeeklyFields = document.getElementById(
+    `${formType}MultiWeeklyFields`,
+  );
   const intervalFields = document.getElementById(`${formType}IntervalFields`);
   const cronFields = document.getElementById(`${formType}CronFields`);
 
   // Hide all first
   dailyFields.style.display = "none";
   weeklyFields.style.display = "none";
+  if (multiWeeklyFields) multiWeeklyFields.style.display = "none";
   intervalFields.style.display = "none";
   cronFields.style.display = "none";
 
@@ -99,6 +115,8 @@ function toggleScheduleInputs(formType) {
     dailyFields.style.display = "block";
   } else if (scheduleType === "simple_weekly") {
     weeklyFields.style.display = "block";
+  } else if (scheduleType === "simple_multi_weekly") {
+    if (multiWeeklyFields) multiWeeklyFields.style.display = "block";
   } else if (scheduleType === "interval") {
     intervalFields.style.display = "block";
   } else if (scheduleType === "cron") {
@@ -111,12 +129,14 @@ function toggleScheduleTypeFields() {
   const scheduleType = document.getElementById("scheduleType").value;
   const dailyFields = document.getElementById("dailyFieldsModal");
   const weeklyFields = document.getElementById("weeklyFieldsModal");
+  const multiWeeklyFields = document.getElementById("multiWeeklyFieldsModal");
   const intervalFields = document.getElementById("intervalFieldsModal");
   const cronFields = document.getElementById("cronFieldsModal");
 
   // Hide all first
   dailyFields.style.display = "none";
   weeklyFields.style.display = "none";
+  if (multiWeeklyFields) multiWeeklyFields.style.display = "none";
   intervalFields.style.display = "none";
   cronFields.style.display = "none";
 
@@ -125,6 +145,8 @@ function toggleScheduleTypeFields() {
     dailyFields.style.display = "block";
   } else if (scheduleType === "simple_weekly") {
     weeklyFields.style.display = "block";
+  } else if (scheduleType === "simple_multi_weekly") {
+    if (multiWeeklyFields) multiWeeklyFields.style.display = "block";
   } else if (scheduleType === "interval") {
     intervalFields.style.display = "block";
   } else if (scheduleType === "cron") {
@@ -184,6 +206,20 @@ async function apiCall(endpoint, options = {}) {
 async function loadApps() {
   try {
     apps = await apiCall("/apps");
+
+    // Load schedules for each scheduled app
+    for (let app of apps) {
+      if (app.app_type === "SCHEDULED" || app.app_type === "scheduled") {
+        try {
+          const schedules = await apiCall(`/schedules?app_id=${app.id}`);
+          app.schedules = schedules;
+        } catch (error) {
+          console.error(`Failed to load schedules for app ${app.id}:`, error);
+          app.schedules = [];
+        }
+      }
+    }
+
     renderApps();
     updateStats();
   } catch (error) {
@@ -194,8 +230,11 @@ async function loadApps() {
 // Load System Info
 async function loadSystemInfo() {
   try {
-    const info = await apiCall("/system/info");
-    systemTimezone = info.timezone;
+    const tzInfo = await apiCall("/settings/timezone");
+    systemTimezone = tzInfo.timezone;
+
+    // Update timezone display
+    document.getElementById("currentTimezone").textContent = systemTimezone;
 
     // Update all timezone display elements
     const timezoneInfoElements = document.querySelectorAll(".timezone-info");
@@ -205,6 +244,43 @@ async function loadSystemInfo() {
   } catch (error) {
     console.error("Failed to load system info:", error);
   }
+}
+
+// Update clock
+function updateClock() {
+  const now = new Date();
+  const timeString = now.toLocaleTimeString("en-US", {
+    hour12: false,
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+  document.getElementById("currentTime").textContent = timeString;
+}
+
+// Format datetime for display
+function formatDateTime(dateString) {
+  if (!dateString) return "N/A";
+
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffMs = date - now;
+  const diffMins = Math.floor(diffMs / 60000);
+
+  // If within next hour, show relative time
+  if (diffMins >= 0 && diffMins < 60) {
+    if (diffMins === 0) return "in <1 min";
+    return `in ${diffMins} min`;
+  }
+
+  // Otherwise show formatted time
+  return date.toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
 }
 
 // Render Apps
@@ -264,6 +340,18 @@ function renderApps() {
                 <div class="meta-item">
                     <span>🌐</span>
                     <a href="${app.web_url}" target="_blank" onclick="event.stopPropagation()">Open</a>
+                </div>
+                `
+                    : ""
+                }
+                ${
+                  app.schedules &&
+                  app.schedules.length > 0 &&
+                  app.schedules[0].next_run
+                    ? `
+                <div class="meta-item">
+                    <span>⏰</span>
+                    <span>Next: ${formatDateTime(app.schedules[0].next_run)}</span>
                 </div>
                 `
                     : ""
@@ -564,6 +652,17 @@ async function createScheduleFromUpload(appId, formData, formType) {
     const dayOfWeek = formData.get("week_day") || "0";
     scheduleData.schedule_type = "cron";
     scheduleData.cron_expression = `${minute} ${hour} * * ${dayOfWeek}`;
+  } else if (scheduleType === "simple_multi_weekly") {
+    // Multiple days per week - convert to cron
+    const time = formData.get("multi_weekly_time") || "07:00";
+    const [hour, minute] = time.split(":");
+    const selectedDays = formData.getAll("multi_week_days");
+    if (selectedDays.length === 0) {
+      throw new Error("Please select at least one day");
+    }
+    const daysString = selectedDays.sort((a, b) => a - b).join(",");
+    scheduleData.schedule_type = "cron";
+    scheduleData.cron_expression = `${minute} ${hour} * * ${daysString}`;
   } else if (scheduleType === "interval") {
     // Interval - convert to seconds
     const intervalValue = parseInt(formData.get("interval_value") || "5");
@@ -763,8 +862,10 @@ async function manageSchedule(appId) {
     document.getElementById("scheduleName").value = schedule.name;
     document.getElementById("scheduleDescription").value =
       schedule.description || "";
-    document.getElementById("scheduleType").value = schedule.schedule_type;
     document.getElementById("scheduleEnabled").checked = schedule.is_enabled;
+
+    // Detect schedule type and populate appropriate fields
+    let detectedType = schedule.schedule_type;
 
     if (schedule.schedule_type === "interval") {
       // Convert seconds back to human-readable
@@ -782,11 +883,65 @@ async function manageSchedule(appId) {
       }
       document.getElementById("intervalValue").value = value;
       document.getElementById("intervalUnit").value = unit;
-    } else {
-      document.getElementById("cronExpression").value =
-        schedule.cron_expression;
+      detectedType = "interval";
+    } else if (schedule.schedule_type === "cron") {
+      // Try to detect if it's a simple daily or weekly pattern
+      const cron = schedule.cron_expression;
+      const parts = cron.split(" ");
+
+      // Check for daily pattern: "M H * * *"
+      if (
+        parts.length === 5 &&
+        parts[2] === "*" &&
+        parts[3] === "*" &&
+        parts[4] === "*"
+      ) {
+        const minute = parts[0];
+        const hour = parts[1];
+        const time = `${hour.padStart(2, "0")}:${minute.padStart(2, "0")}`;
+        document.getElementById("dailyTime").value = time;
+        detectedType = "simple_daily";
+      }
+      // Check for weekly pattern: "M H * * D" or multi-weekly "M H * * D1,D2,D3"
+      else if (
+        parts.length === 5 &&
+        parts[2] === "*" &&
+        parts[3] === "*" &&
+        parts[4] !== "*"
+      ) {
+        const minute = parts[0];
+        const hour = parts[1];
+        const time = `${hour.padStart(2, "0")}:${minute.padStart(2, "0")}`;
+        const daysString = parts[4];
+
+        // Check if it's multiple days (contains comma)
+        if (daysString.includes(",")) {
+          // Multi-day weekly pattern
+          const days = daysString.split(",");
+          document.getElementById("multiWeeklyTime").value = time;
+          // Check the appropriate day checkboxes
+          const checkboxes = document.querySelectorAll(
+            'input[name="multi_week_days"]',
+          );
+          checkboxes.forEach((checkbox) => {
+            checkbox.checked = days.includes(checkbox.value);
+          });
+          detectedType = "simple_multi_weekly";
+        } else {
+          // Single day weekly pattern
+          document.getElementById("weeklyTime").value = time;
+          document.getElementById("weekDay").value = daysString;
+          detectedType = "simple_weekly";
+        }
+      }
+      // Otherwise it's an advanced cron
+      else {
+        document.getElementById("cronExpression").value = cron;
+        detectedType = "cron";
+      }
     }
 
+    document.getElementById("scheduleType").value = detectedType;
     toggleScheduleTypeFields();
   } else {
     // New schedule
@@ -833,6 +988,18 @@ async function handleScheduleSubmit(e) {
     const dayOfWeek = formData.get("week_day") || "0";
     scheduleData.schedule_type = "cron";
     scheduleData.cron_expression = `${minute} ${hour} * * ${dayOfWeek}`;
+  } else if (scheduleType === "simple_multi_weekly") {
+    // Multiple days per week - convert to cron
+    const time = formData.get("multi_weekly_time") || "07:00";
+    const [hour, minute] = time.split(":");
+    const selectedDays = formData.getAll("multi_week_days");
+    if (selectedDays.length === 0) {
+      alert("Please select at least one day");
+      return;
+    }
+    const daysString = selectedDays.sort((a, b) => a - b).join(",");
+    scheduleData.schedule_type = "cron";
+    scheduleData.cron_expression = `${minute} ${hour} * * ${daysString}`;
   } else if (scheduleType === "interval") {
     // Interval - convert to seconds
     const intervalValue = parseInt(formData.get("interval_value"));
@@ -872,5 +1039,200 @@ async function handleScheduleSubmit(e) {
     loadApps();
   } catch (error) {
     // Error already handled in apiCall
+  }
+}
+
+// Settings Management
+async function openSettingsModal() {
+  openModal("settingsModal");
+
+  // Load current settings and available timezones
+  try {
+    const [settings, tzData] = await Promise.all([
+      apiCall("/settings"),
+      apiCall("/settings/available-timezones"),
+    ]);
+
+    const tzInfo = await apiCall("/settings/timezone");
+
+    // Populate timezone select
+    const select = document.getElementById("timezoneSelect");
+    select.innerHTML = "";
+
+    // Add common timezones first
+    const commonTimezones = [
+      "America/New_York",
+      "America/Chicago",
+      "America/Denver",
+      "America/Los_Angeles",
+      "America/Phoenix",
+      "Europe/London",
+      "Europe/Paris",
+      "Asia/Tokyo",
+      "Australia/Sydney",
+      "UTC",
+    ];
+
+    const commonGroup = document.createElement("optgroup");
+    commonGroup.label = "Common Timezones";
+    commonTimezones.forEach((tz) => {
+      const option = document.createElement("option");
+      option.value = tz;
+      option.textContent = tz;
+      commonGroup.appendChild(option);
+    });
+    select.appendChild(commonGroup);
+
+    // Add all timezones grouped by region
+    Object.entries(tzData.grouped).forEach(([region, timezones]) => {
+      const group = document.createElement("optgroup");
+      group.label = region;
+      timezones.forEach((tz) => {
+        const option = document.createElement("option");
+        option.value = tz;
+        option.textContent = tz;
+        group.appendChild(option);
+      });
+      select.appendChild(group);
+    });
+
+    // Set current timezone
+    select.value = tzInfo.timezone;
+
+    // Show detected timezone
+    document.getElementById("detectedTimezone").textContent =
+      tzInfo.detected_timezone;
+  } catch (error) {
+    console.error("Failed to load settings:", error);
+    alert("Failed to load settings");
+  }
+}
+
+async function handleSettingsSubmit(e) {
+  e.preventDefault();
+
+  const formData = new FormData(e.target);
+  const timezone = formData.get("timezone");
+
+  try {
+    const result = await apiCall("/settings/timezone", {
+      method: "PUT",
+      body: JSON.stringify({ value: timezone }),
+    });
+
+    alert(result.message);
+    closeModal("settingsModal");
+
+    // Reload system info to update timezone displays
+    loadSystemInfo();
+  } catch (error) {
+    // Error already handled in apiCall
+  }
+}
+
+// Scheduler Debug Functions
+function toggleSchedulerDebug() {
+  const panel = document.getElementById("schedulerDebugPanel");
+  if (panel.style.display === "none") {
+    panel.style.display = "block";
+    refreshSchedulerDebug();
+  } else {
+    panel.style.display = "none";
+  }
+}
+
+async function refreshSchedulerDebug() {
+  const content = document.getElementById("schedulerDebugContent");
+  content.innerHTML = '<p class="loading">Loading scheduler information...</p>';
+
+  try {
+    const status = await apiCall("/schedules/debug/scheduler-status");
+
+    let html = `
+      <div class="debug-info">
+        <div class="debug-row">
+          <strong>Scheduler Running:</strong>
+          <span class="${status.running ? "status-running" : "status-stopped"}">
+            ${status.running ? "✓ Yes" : "✗ No"}
+          </span>
+        </div>
+        <div class="debug-row">
+          <strong>Scheduler Timezone:</strong>
+          <span>${status.scheduler_timezone || "Not set"}</span>
+        </div>
+        <div class="debug-row">
+          <strong>Current Server Time:</strong>
+          <span>${
+            status.current_time
+              ? new Date(status.current_time).toLocaleString()
+              : "Unknown"
+          }</span>
+        </div>
+        <div class="debug-row">
+          <strong>Number of Jobs:</strong>
+          <span>${status.num_jobs}</span>
+        </div>
+      </div>
+    `;
+
+    if (status.jobs && status.jobs.length > 0) {
+      html += `
+        <div class="debug-section">
+          <h4>Scheduled Jobs:</h4>
+          <table class="debug-table">
+            <thead>
+              <tr>
+                <th>Job ID</th>
+                <th>Name</th>
+                <th>Next Run (UTC)</th>
+                <th>Next Run (Local)</th>
+                <th>Trigger</th>
+              </tr>
+            </thead>
+            <tbody>
+      `;
+
+      status.jobs.forEach((job) => {
+        const nextRunUTC = job.next_run_time
+          ? new Date(job.next_run_time).toLocaleString()
+          : "Not scheduled";
+
+        const nextRunLocal = job.next_run_time_local
+          ? formatDateTime(new Date(job.next_run_time_local))
+          : "Not scheduled";
+
+        html += `
+          <tr>
+            <td><code>${job.id}</code></td>
+            <td>${job.name}</td>
+            <td>${nextRunUTC}</td>
+            <td>${nextRunLocal}</td>
+            <td><code>${job.trigger}</code></td>
+          </tr>
+        `;
+      });
+
+      html += `
+            </tbody>
+          </table>
+        </div>
+      `;
+    } else {
+      html += `
+        <div class="debug-info">
+          <p><em>No jobs currently scheduled</em></p>
+        </div>
+      `;
+    }
+
+    content.innerHTML = html;
+  } catch (error) {
+    content.innerHTML = `
+      <div class="error-message">
+        <p>Failed to load scheduler status:</p>
+        <pre>${error.message}</pre>
+      </div>
+    `;
+    console.error("Failed to load scheduler debug info:", error);
   }
 }

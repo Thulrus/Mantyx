@@ -157,3 +157,9 @@ def disable_schedule(
     scheduler.remove_schedule(schedule_id)
 
     return {"message": "Schedule disabled successfully"}
+
+
+@router.get("/debug/scheduler-status")
+def get_scheduler_status(scheduler: AppScheduler = Depends(get_scheduler), ):
+    """Get detailed scheduler status for debugging."""
+    return scheduler.get_scheduler_status()
