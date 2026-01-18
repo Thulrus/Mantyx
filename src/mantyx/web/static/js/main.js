@@ -877,19 +877,26 @@ async function showAppDetails(appId) {
                   .map(
                     (exec) => `
                     <div style="background: var(--bg-tertiary); padding: 0.8rem; margin: 0.5rem 0; border-radius: 4px;">
-                        <div><strong>ID:</strong> ${
-                          exec.id
-                        } | <strong>Status:</strong> ${exec.status}</div>
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                            <div>
+                                <strong>ID:</strong> ${exec.id} | 
+                                <strong>Status:</strong> <span class="status-badge ${exec.status}">${exec.status}</span>
+                                ${exec.exit_code !== null ? ` | <strong>Exit Code:</strong> ${exec.exit_code}` : ""}
+                            </div>
+                            <button class="btn btn-sm btn-secondary" onclick="viewExecutionLogs(${exec.id})">
+                                📄 View Logs
+                            </button>
+                        </div>
                         ${
                           exec.started_at
-                            ? `<div><strong>Started:</strong> ${new Date(
+                            ? `<div style="font-size: 0.9em; color: var(--text-secondary);"><strong>Started:</strong> ${new Date(
                                 exec.started_at,
                               ).toLocaleString()}</div>`
                             : ""
                         }
                         ${
-                          exec.exit_code !== null
-                            ? `<div><strong>Exit Code:</strong> ${exec.exit_code}</div>`
+                          exec.trigger_type
+                            ? `<div style="font-size: 0.9em; color: var(--text-secondary);"><strong>Trigger:</strong> ${exec.trigger_type}</div>`
                             : ""
                         }
                     </div>
@@ -899,7 +906,12 @@ async function showAppDetails(appId) {
             </div>
         </div>
         `
-            : ""
+            : `
+        <div style="margin: 1.5rem 0;">
+            <h3>Recent Executions</h3>
+            <p style="color: var(--text-secondary);">No executions recorded yet.</p>
+        </div>
+        `
         }
         
         ${
@@ -1328,6 +1340,68 @@ async function refreshSchedulerDebug() {
         </div>
       `;
     }
+
+    contentEl.innerHTML = html;
+  } catch (error) {
+    contentEl.innerHTML = `
+      <div style="color: var(--error-color);">
+        <p><strong>Error loading scheduler status:</strong></p>
+        <p>${error.message}</p>
+      </div>
+    `;
+  }
+}
+
+// View execution logs
+async function viewExecutionLogs(executionId) {
+  try {
+    const [stdoutRes, stderrRes, execution] = await Promise.all([
+      fetch(`${API_BASE}/executions/${executionId}/stdout`),
+      fetch(`${API_BASE}/executions/${executionId}/stderr`),
+      apiCall(`/executions/${executionId}`)
+    ]);
+
+    const stdoutData = await stdoutRes.json();
+    const stderrData = await stderrRes.json();
+
+    const stdout = stdoutData.output || "(empty)";
+    const stderr = stderrData.output || "(empty)";
+
+    const content = document.getElementById("logsModalContent");
+    content.innerHTML = `
+      <div class="logs-header">
+        <h3>Execution #${executionId} Logs</h3>
+        <div class="logs-info">
+          <p><strong>Status:</strong> <span class="status-badge ${execution.status}">${execution.status}</span></p>
+          ${execution.exit_code !== null ? `<p><strong>Exit Code:</strong> ${execution.exit_code}</p>` : ""}
+          ${execution.started_at ? `<p><strong>Started:</strong> ${new Date(execution.started_at).toLocaleString()}</p>` : ""}
+          ${execution.ended_at ? `<p><strong>Ended:</strong> ${new Date(execution.ended_at).toLocaleString()}</p>` : ""}
+        </div>
+      </div>
+      
+      <div class="logs-section">
+        <h4 style="color: var(--success-color); margin-bottom: 0.5rem;">📤 Standard Output (stdout)</h4>
+        <pre class="log-output">${escapeHtml(stdout)}</pre>
+      </div>
+      
+      <div class="logs-section">
+        <h4 style="color: var(--error-color); margin-bottom: 0.5rem;">📥 Standard Error (stderr)</h4>
+        <pre class="log-output">${escapeHtml(stderr)}</pre>
+      </div>
+    `;
+
+    openModal("logsModal");
+  } catch (error) {
+    alert(`Failed to load logs: ${error.message}`);
+  }
+}
+
+// Helper to escape HTML
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
 
     content.innerHTML = html;
   } catch (error) {

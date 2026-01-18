@@ -30,15 +30,15 @@
       </header>
 
       <!-- Main Content -->
-      <main>
+      <main class="fade-in-up">
         <!-- System Info Bar -->
         <div class="system-info-bar">
           <div class="system-info-item">
-            <span class="info-label">Current Time:</span>
+            <span class="info-label">Current Time</span>
             <span id="currentTime" class="info-value">--:--:--</span>
           </div>
           <div class="system-info-item">
-            <span class="info-label">Timezone:</span>
+            <span class="info-label">Timezone</span>
             <span id="currentTimezone" class="info-value">Loading...</span>
           </div>
           <div class="system-info-item">
@@ -46,7 +46,7 @@
               class="btn btn-secondary btn-sm"
               onclick="toggleSchedulerDebug()"
             >
-              🐛 Scheduler Debug
+              🐛 Debug
             </button>
           </div>
         </div>
@@ -946,6 +946,16 @@
       </div>
     </div>
 
-    <script src="/static/js/main.js?v=5"></script>
+    <!-- Logs Modal -->
+    <div id="logsModal" class="modal">
+      <div class="modal-content modal-large">
+        <span class="close">&times;</span>
+        <div id="logsModalContent">
+          <p>Loading logs...</p>
+        </div>
+      </div>
+    </div>
+
+    <script src="/static/js/main.js?v=6"></script>
   </body>
 </html>
