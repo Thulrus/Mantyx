@@ -67,7 +67,19 @@ The VS Code task is pre-configured for your server.
 1. Syncs only changed code files
 2. Preserves `mantyx_data/` (all apps, schedules, logs)
 3. Updates Python dependencies
-4. Restarts service (2-3 second downtime)
+4. **Runs database migrations** (adds new columns/tables automatically)
+5. Restarts service (2-3 second downtime)
+
+## Database Migrations
+
+Mantyx automatically handles database schema updates:
+
+- **New columns/tables**: Added automatically on deployment
+- **Migration scripts**: Run automatically from `migrations/` directory
+- **Idempotent**: Safe to run multiple times
+- **No downtime**: Migrations run before service restart
+
+See `migrations/README.md` for details on the migration system.
 
 ## What Gets Preserved
 

@@ -186,6 +186,21 @@ deploy_update() {
     log_step "Updating dependencies..."
     ssh "${REMOTE_USER}@${REMOTE_HOST}" "cd '${REMOTE_PATH}' && .venv/bin/pip install -e . --quiet"
     
+    log_step "Running database migrations..."
+    # Run migrations if they exist
+    if ssh "${REMOTE_USER}@${REMOTE_HOST}" "[ -d '${REMOTE_PATH}/migrations' ]"; then
+        # Find all migration scripts and run them
+        ssh "${REMOTE_USER}@${REMOTE_HOST}" "
+            export MANTYX_BASE_DIR='${REMOTE_PATH}/mantyx_data'
+            for migration in '${REMOTE_PATH}/migrations'/*.py; do
+                if [ -f \"\$migration\" ]; then
+                    echo \"Running migration: \$(basename \$migration)\"
+                    '${REMOTE_PATH}/.venv/bin/python' \"\$migration\" || true
+                fi
+            done
+        "
+    fi
+    
     # Check if service exists
     if ! ssh "${REMOTE_USER}@${REMOTE_HOST}" "sudo systemctl list-unit-files ${SERVICE_NAME}.service" 2>/dev/null | grep -q "${SERVICE_NAME}"; then
         log_warn "Systemd service not found - setting it up..."
