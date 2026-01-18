@@ -823,6 +823,129 @@
       </div>
     </div>
 
+    <!-- Update App Modal -->
+    <div id="updateModal" class="modal">
+      <div class="modal-content">
+        <span class="close">&times;</span>
+        <h2>Update Application</h2>
+        <p id="updateAppInfo" class="info-text"></p>
+
+        <div class="tabs">
+          <button class="tab-btn active" data-tab="updateZip">
+            ZIP Upload
+          </button>
+          <button
+            class="tab-btn"
+            data-tab="updateGit"
+            id="updateGitTab"
+            style="display: none"
+          >
+            Pull from Git
+          </button>
+        </div>
+
+        <!-- ZIP Update Tab -->
+        <div id="updateZipTab" class="tab-content active">
+          <form id="zipUpdateForm">
+            <input type="hidden" id="updateAppId" name="app_id" />
+
+            <div class="form-group">
+              <label for="updateZipFile">New ZIP File</label>
+              <input
+                type="file"
+                id="updateZipFile"
+                name="file"
+                accept=".zip"
+                required
+              />
+              <small>Upload a new version of your application</small>
+            </div>
+
+            <div class="form-group">
+              <label>
+                <input
+                  type="checkbox"
+                  id="updateBackup"
+                  name="backup"
+                  checked
+                />
+                Create backup before updating
+              </label>
+              <small
+                >Recommended: Creates a backup of the current version</small
+              >
+            </div>
+
+            <div class="alert alert-info">
+              <strong>Note:</strong> The app will be stopped during the update
+              and automatically restarted if it was running. Dependencies will
+              be reinstalled if requirements.txt changed.
+            </div>
+
+            <div class="form-actions">
+              <button type="submit" class="btn btn-primary">Update App</button>
+              <button
+                type="button"
+                class="btn btn-secondary"
+                onclick="closeModal('updateModal')"
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <!-- Git Update Tab -->
+        <div id="updateGitTab" class="tab-content">
+          <form id="gitUpdateForm">
+            <input type="hidden" id="updateGitAppId" name="app_id" />
+
+            <div class="form-group">
+              <p class="info-text">
+                Pull the latest changes from the Git repository for this
+                application.
+              </p>
+              <p id="updateGitInfo" class="info-text"></p>
+            </div>
+
+            <div class="form-group">
+              <label>
+                <input
+                  type="checkbox"
+                  id="updateGitBackup"
+                  name="backup"
+                  checked
+                />
+                Create backup before updating
+              </label>
+              <small
+                >Recommended: Creates a backup of the current version</small
+              >
+            </div>
+
+            <div class="alert alert-info">
+              <strong>Note:</strong> The app will be stopped during the update
+              and automatically restarted if it was running. Dependencies will
+              be reinstalled if requirements.txt changed.
+            </div>
+
+            <div class="form-actions">
+              <button type="submit" class="btn btn-primary">
+                Pull Latest Changes
+              </button>
+              <button
+                type="button"
+                class="btn btn-secondary"
+                onclick="closeModal('updateModal')"
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
     <script src="/static/js/main.js?v=5"></script>
   </body>
 </html>

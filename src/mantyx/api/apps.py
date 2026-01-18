@@ -9,7 +9,14 @@ from typing import Optional
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
-from mantyx.api.schemas import AppCreate, AppResponse, AppStatusResponse, AppUpdate, UploadResponse
+from mantyx.api.schemas import (
+    AppCreate,
+    AppResponse,
+    AppStatusResponse,
+    AppUpdate,
+    UpdateResponse,
+    UploadResponse,
+)
 from mantyx.config import get_settings
 from mantyx.core.app_manager import AppManager
 from mantyx.database import get_db_session
@@ -262,6 +269,84 @@ def restart_app(
         return {"message": "App restarted successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/{app_id}/update/zip", response_model=UpdateResponse)
+async def update_app_zip(
+        app_id: int,
+        file: UploadFile = File(...),
+        backup: bool = Form(True),
+        app_manager: AppManager = Depends(get_app_manager),
+):
+    """Update an app from a ZIP file."""
+    settings = get_settings()
+
+    # Save uploaded file
+    filename = file.filename or f"update_{app_id}.zip"
+    temp_path = settings.temp_dir / filename
+    temp_path.parent.mkdir(parents=True, exist_ok=True)
+
+    try:
+        with temp_path.open("wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+
+        # Update app
+        result = app_manager.update_app_from_zip(
+            app_id,
+            temp_path,
+            backup=backup,
+        )
+
+        return UpdateResponse(
+            app_id=result["app_id"],
+            app_name=result["app_name"],
+            old_version=result["old_version"],
+            new_version=result["new_version"],
+            backup_created=result["backup_created"],
+            message=
+            f"App updated successfully from {result['old_version']} to {result['new_version']}",
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500,
+                            detail=f"Failed to update app: {str(e)}")
+    finally:
+        if temp_path.exists():
+            temp_path.unlink()
+
+
+@router.post("/{app_id}/update/git", response_model=UpdateResponse)
+def update_app_git(
+        app_id: int,
+        backup: bool = Form(True),
+        app_manager: AppManager = Depends(get_app_manager),
+):
+    """Pull latest changes from Git repository for an app."""
+    try:
+        result = app_manager.pull_git_app(app_id, backup=backup)
+
+        if not result["changed"]:
+            message = "No changes detected, app is already up to date"
+        else:
+            message = f"App updated successfully from {result['old_version']} to {result['new_version']}"
+
+        return UpdateResponse(
+            app_id=result["app_id"],
+            app_name=result["app_name"],
+            old_version=result["old_version"],
+            new_version=result["new_version"],
+            changed=result["changed"],
+            backup_created=result["backup_created"],
+            old_commit=result.get("old_commit"),
+            new_commit=result.get("new_commit"),
+            message=message,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500,
+                            detail=f"Failed to pull Git updates: {str(e)}")
 
 
 @router.post("/{app_id}/run")

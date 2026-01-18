@@ -686,6 +686,31 @@ h1 {
   font-size: 0.85rem;
 }
 
+/* Alert Boxes */
+.alert {
+  padding: 1rem;
+  border-radius: 6px;
+  margin: 1rem 0;
+  border-left: 4px solid;
+}
+
+.alert-info {
+  background-color: rgba(66, 133, 244, 0.1);
+  border-left-color: var(--info);
+  color: var(--text-primary);
+}
+
+.alert strong {
+  font-weight: 600;
+}
+
+/* Info Text */
+.info-text {
+  color: var(--text-secondary);
+  margin-bottom: 1rem;
+  line-height: 1.5;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   .header-content {

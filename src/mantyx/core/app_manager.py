@@ -9,7 +9,7 @@ import shutil
 import zipfile
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import yaml
 from git import Repo
@@ -362,6 +362,253 @@ class AppManager:
             finally:
                 if temp_dir.exists():
                     shutil.rmtree(temp_dir)
+
+    def update_app_from_zip(
+        self,
+        app_id: int,
+        zip_path: Path,
+        backup: bool = True,
+    ) -> dict[str, Any]:
+        """Update an app from a ZIP archive while preserving configuration."""
+        logger.info(f"Updating app {app_id} from ZIP: {zip_path}")
+
+        self._validate_upload(zip_path)
+
+        with get_db() as session:
+            app = session.query(App).filter(App.id == app_id).first()
+            if not app:
+                raise ValueError(f"App {app_id} not found")
+
+            if app.is_deleted:
+                raise ValueError(f"Cannot update deleted app {app.name}")
+
+            app_name = app.name
+            was_running = app.state == AppState.RUNNING
+            was_enabled = app.state == AppState.ENABLED
+            old_version = app.version
+
+        # Stop the app if running
+        if was_running:
+            with get_db() as session:
+                app = session.query(App).filter(App.id == app_id).first()
+                self.supervisor.stop_app(app)
+
+        # Create backup if requested
+        if backup:
+            backup_dir = self._backup_app(app_name)
+            logger.info(f"Created backup at {backup_dir}")
+
+        source_dir = self._get_app_source_dir(app_name)
+        temp_dir = self.settings.temp_dir / f"{app_name}_update"
+
+        try:
+            # Extract new source to temp directory
+            temp_dir.mkdir(parents=True, exist_ok=True)
+
+            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                # Security: check for path traversal
+                for member in zip_ref.namelist():
+                    if member.startswith('/') or '..' in member:
+                        raise ValueError(f"Invalid path in ZIP: {member}")
+                zip_ref.extractall(temp_dir)
+
+            # Detect new entrypoint
+            new_entrypoint = self._detect_entrypoint(temp_dir)
+
+            # Remove old source and move new
+            if source_dir.exists():
+                shutil.rmtree(source_dir)
+            shutil.move(str(temp_dir), str(source_dir))
+
+            # Reinstall dependencies
+            requirements_file = source_dir / "requirements.txt"
+            if requirements_file.exists():
+                logger.info(f"Reinstalling dependencies for {app_name}")
+                self.venv_manager.install_requirements(app_name,
+                                                       requirements_file)
+            else:
+                logger.info(f"No requirements.txt found for {app_name}")
+
+            # Update app record
+            with get_db() as session:
+                app = session.query(App).filter(App.id == app_id).first()
+
+                # Increment version
+                version_parts = app.version.split('.')
+                if len(version_parts) == 3:
+                    version_parts[-1] = str(int(version_parts[-1]) + 1)
+                else:
+                    version_parts = [old_version, '1']
+                app.version = '.'.join(version_parts)
+
+                app.entrypoint = new_entrypoint
+                app.last_updated_at = datetime.now()
+                app.update_count += 1
+                session.add(app)
+                session.commit()
+
+                new_version = app.version
+
+            # Restart if it was running or enabled
+            if was_running:
+                with get_db() as session:
+                    app = session.query(App).filter(App.id == app_id).first()
+                    if app:
+                        self.supervisor.start_app(app)
+                        logger.info(f"Restarted app {app_name} after update")
+
+            logger.info(
+                f"App {app_name} updated successfully from {old_version} to {new_version}",
+                app_id=app_id)
+
+            return {
+                "app_id": app_id,
+                "app_name": app_name,
+                "old_version": old_version,
+                "new_version": new_version,
+                "backup_created": backup,
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to update app {app_name}: {e}",
+                         app_id=app_id)
+            # TODO: Implement rollback from backup
+            raise
+        finally:
+            if temp_dir.exists():
+                shutil.rmtree(temp_dir)
+
+    def pull_git_app(self, app_id: int, backup: bool = True) -> dict[str, Any]:
+        """Pull latest changes from Git repository for an app."""
+        logger.info(f"Pulling Git updates for app {app_id}")
+
+        with get_db() as session:
+            app = session.query(App).filter(App.id == app_id).first()
+            if not app:
+                raise ValueError(f"App {app_id} not found")
+
+            if not app.git_url:
+                raise ValueError(f"App {app.name} is not a Git-based app")
+
+            if app.is_deleted:
+                raise ValueError(f"Cannot update deleted app {app.name}")
+
+            app_name = app.name
+            git_url = app.git_url
+            git_branch = app.git_branch or "main"
+            old_commit = app.git_commit
+            old_version = app.version
+            was_running = app.state == AppState.RUNNING
+
+        # Stop the app if running
+        if was_running:
+            with get_db() as session:
+                app = session.query(App).filter(App.id == app_id).first()
+                if app:
+                    self.supervisor.stop_app(app)
+
+        # Create backup if requested
+        if backup:
+            backup_dir = self._backup_app(app_name)
+            logger.info(f"Created backup at {backup_dir}")
+
+        source_dir = self._get_app_source_dir(app_name)
+
+        try:
+            # Open the existing repo and pull
+            repo = Repo(source_dir)
+            origin = repo.remotes.origin
+            origin.pull(git_branch)
+
+            new_commit = repo.head.commit.hexsha
+
+            # Check if anything actually changed
+            if new_commit == old_commit:
+                logger.info(
+                    f"No changes detected for {app_name} (commit: {new_commit})"
+                )
+
+                # Restart if it was running
+                if was_running:
+                    with get_db() as session:
+                        app = session.query(App).filter(
+                            App.id == app_id).first()
+                        if app:
+                            self.supervisor.start_app(app)
+
+                return {
+                    "app_id": app_id,
+                    "app_name": app_name,
+                    "old_version": old_version,
+                    "new_version": old_version,
+                    "old_commit": old_commit or "",
+                    "new_commit": new_commit,
+                    "changed": False,
+                    "backup_created": False,
+                }
+
+            # Reinstall dependencies in case they changed
+            requirements_file = source_dir / "requirements.txt"
+            if requirements_file.exists():
+                logger.info(f"Reinstalling dependencies for {app_name}")
+                self.venv_manager.install_requirements(app_name,
+                                                       requirements_file)
+
+            # Detect entrypoint in case it changed
+            new_entrypoint = self._detect_entrypoint(source_dir)
+
+            # Update app record
+            with get_db() as session:
+                app = session.query(App).filter(App.id == app_id).first()
+                if not app:
+                    raise ValueError(f"App {app_id} not found")
+
+                # Increment version
+                version_parts = app.version.split('.')
+                if len(version_parts) == 3:
+                    version_parts[-1] = str(int(version_parts[-1]) + 1)
+                else:
+                    version_parts = [old_version, '1']
+                app.version = '.'.join(version_parts)
+
+                app.git_commit = new_commit
+                app.entrypoint = new_entrypoint
+                app.last_updated_at = datetime.now()
+                app.update_count += 1
+                session.add(app)
+                session.commit()
+
+                new_version = app.version
+
+            # Restart if it was running
+            if was_running:
+                with get_db() as session:
+                    app = session.query(App).filter(App.id == app_id).first()
+                    if app:
+                        self.supervisor.start_app(app)
+                        logger.info(f"Restarted app {app_name} after update")
+
+            old_commit_short = old_commit[:8] if old_commit else "unknown"
+            logger.info(
+                f"App {app_name} updated from commit {old_commit_short} to {new_commit[:8]}",
+                app_id=app_id)
+
+            return {
+                "app_id": app_id,
+                "app_name": app_name,
+                "old_version": old_version,
+                "new_version": new_version,
+                "old_commit": old_commit or "",
+                "new_commit": new_commit,
+                "changed": True,
+                "backup_created": backup,
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to pull Git updates for {app_name}: {e}",
+                         app_id=app_id)
+            # TODO: Implement rollback from backup
+            raise
 
     def _backup_app(self, app_name: str) -> Path:
         """Create a backup of an app."""

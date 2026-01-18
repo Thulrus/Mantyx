@@ -167,6 +167,19 @@ class UploadResponse(BaseModel):
     message: str
 
 
+# Update schemas
+class UpdateResponse(BaseModel):
+    app_id: int
+    app_name: str
+    old_version: str
+    new_version: str
+    changed: bool = True
+    backup_created: bool = True
+    old_commit: Optional[str] = None
+    new_commit: Optional[str] = None
+    message: str
+
+
 # Status schemas
 class AppStatusResponse(BaseModel):
     app_id: int

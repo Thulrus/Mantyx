@@ -77,6 +77,12 @@ function initializeEventListeners() {
   document
     .getElementById("settingsForm")
     .addEventListener("submit", handleSettingsSubmit);
+  document
+    .getElementById("zipUpdateForm")
+    .addEventListener("submit", handleZipUpdate);
+  document
+    .getElementById("gitUpdateForm")
+    .addEventListener("submit", handleGitUpdate);
 }
 
 // Toggle schedule fields in upload forms
@@ -452,6 +458,13 @@ function getAppActions(app) {
     `<button class="btn btn-danger btn-small" onclick="deleteApp(${app.id})">Delete</button>`,
   );
 
+  // Update button (for all states except deleted)
+  if (app.state !== "deleted" && app.state !== "DELETED") {
+    actions.push(
+      `<button class="btn btn-primary btn-small" onclick="showUpdateModal(${app.id})">Update</button>`,
+    );
+  }
+
   return actions.join("");
 }
 
@@ -557,6 +570,97 @@ async function deleteApp(appId) {
     } catch (error) {
       // Error already handled
     }
+  }
+}
+
+// Update App Modal
+function showUpdateModal(appId) {
+  const app = apps.find((a) => a.id === appId);
+  if (!app) {
+    alert("App not found");
+    return;
+  }
+
+  // Set app ID in both forms
+  document.getElementById("updateAppId").value = appId;
+  document.getElementById("updateGitAppId").value = appId;
+
+  // Set app info
+  document.getElementById("updateAppInfo").textContent =
+    `Updating: ${app.display_name} (${app.name}) - v${app.version}`;
+
+  // Show/hide Git tab based on whether app is from Git
+  const gitTab = document.getElementById("updateGitTab");
+  if (app.git_url) {
+    gitTab.style.display = "block";
+    document.getElementById("updateGitInfo").textContent =
+      `Repository: ${app.git_url}\nBranch: ${app.git_branch || "main"}\nCurrent commit: ${app.git_commit ? app.git_commit.substring(0, 8) : "unknown"}`;
+  } else {
+    gitTab.style.display = "none";
+    // Reset to ZIP tab if Git was selected
+    switchTab("updateZip");
+  }
+
+  openModal("updateModal");
+}
+
+// Update Handlers
+async function handleZipUpdate(e) {
+  e.preventDefault();
+
+  const formData = new FormData(e.target);
+  const appId = document.getElementById("updateAppId").value;
+
+  try {
+    const response = await fetch(`${API_BASE}/apps/${appId}/update/zip`, {
+      method: "POST",
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || "Update failed");
+    }
+
+    const result = await response.json();
+
+    alert(result.message || "App updated successfully!");
+    closeModal("updateModal");
+    e.target.reset();
+    loadApps();
+  } catch (error) {
+    alert(`Update failed: ${error.message}`);
+  }
+}
+
+async function handleGitUpdate(e) {
+  e.preventDefault();
+
+  const appId = document.getElementById("updateGitAppId").value;
+  const backup = document.getElementById("updateGitBackup").checked;
+
+  try {
+    const formData = new FormData();
+    formData.append("backup", backup);
+
+    const response = await fetch(`${API_BASE}/apps/${appId}/update/git`, {
+      method: "POST",
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || "Update failed");
+    }
+
+    const result = await response.json();
+
+    alert(result.message || "App updated successfully!");
+    closeModal("updateModal");
+    e.target.reset();
+    loadApps();
+  } catch (error) {
+    alert(`Update failed: ${error.message}`);
   }
 }
 
