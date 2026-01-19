@@ -13,26 +13,26 @@ from pathlib import Path
 def generate_report():
     """Generate a simple daily report."""
     timestamp = datetime.now()
-    
+
     print("=" * 50)
     print(f"Daily Report - {timestamp.strftime('%Y-%m-%d %H:%M:%S')}")
     print("=" * 50)
     print()
-    
+
     # Example: Check a directory
     reports_dir = Path("/tmp/mantyx_reports")
     reports_dir.mkdir(exist_ok=True)
-    
+
     print(f"Reports directory: {reports_dir}")
     print(f"Exists: {reports_dir.exists()}")
-    
+
     # Create a report file
     report_file = reports_dir / f"report_{timestamp.strftime('%Y%m%d_%H%M%S')}.txt"
-    with open(report_file, 'w') as f:
+    with open(report_file, "w") as f:
         f.write(f"Report generated at: {timestamp}\n")
-        f.write(f"Status: OK\n")
-        f.write(f"Items processed: 42\n")
-    
+        f.write("Status: OK\n")
+        f.write("Items processed: 42\n")
+
     print(f"Report saved to: {report_file}")
     print()
     print("Report generation complete!")
@@ -42,7 +42,7 @@ def generate_report():
 def main():
     """Main entry point."""
     print("Starting report generation...")
-    
+
     try:
         generate_report()
         sys.exit(0)

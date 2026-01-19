@@ -46,11 +46,13 @@ Every time an app runs (scheduled or manual), Mantyx creates an **Execution** re
 **Symptoms**: Execution status is "success" but nothing happened
 
 **Possible Causes**:
+
 1. **No print statements**: Your app might not print anything
 2. **Output buffering**: Python buffers output by default
 3. **Wrong entry point**: The script that ran isn't the one you expected
 
 **Solution**:
+
 ```python
 # Add explicit logging to your app
 import sys
@@ -64,11 +66,13 @@ print("App finished!", flush=True)
 **Symptoms**: Exit code is 0 (success) but files weren't created or data wasn't processed
 
 **Check These**:
+
 1. **Working directory**: Apps run from their `app/` directory
 2. **File paths**: Use absolute paths or paths relative to the script location
 3. **Permissions**: Ensure the app has write access to destination folders
 
 **Debug Code**:
+
 ```python
 import os
 print(f"Current directory: {os.getcwd()}", flush=True)
@@ -81,6 +85,7 @@ print(f"Files in current dir: {os.listdir('.')}", flush=True)
 **Symptoms**: Execution fails with `ModuleNotFoundError`
 
 **Solution**:
+
 1. Check that `requirements.txt` lists all dependencies
 2. After updating `requirements.txt`, **update the app** (not just reinstall)
    - Use the "Update App" button in the UI
@@ -90,17 +95,22 @@ print(f"Files in current dir: {os.listdir('.')}", flush=True)
 ### Issue 4: App Runs Locally But Fails in Mantyx
 
 **Possible Causes**:
+
 1. **Different Python version**: Mantyx uses a virtual environment
 2. **Missing environment variables**: Set them in app config
 3. **Path dependencies**: Hardcoded paths that don't exist on server
 
 **Debug Steps**:
+
 1. Check Python version in logs:
+
    ```python
    import sys
    print(f"Python version: {sys.version}")
    ```
+
 2. Check environment:
+
    ```python
    import os
    print(f"HOME: {os.environ.get('HOME')}")
@@ -114,6 +124,7 @@ print(f"Files in current dir: {os.listdir('.')}", flush=True)
 **Cause**: Unhandled exception that wasn't caught
 
 **Solution**: Add comprehensive error handling:
+
 ```python
 import traceback
 import sys
@@ -142,6 +153,7 @@ For scheduled apps, you can see when they'll run next:
 3. Check the next run time
 
 You can also trigger a manual run to test:
+
 1. Click the **"Run Now"** button on the app card
 2. This executes immediately (ignores schedule)
 3. Check the execution logs to see what happened
@@ -165,11 +177,13 @@ Default location (if not configured): `~/.local/share/mantyx/logs/`
 1. **Always use flush=True** when printing important information
 2. **Log at key points**: Start, major steps, completion
 3. **Use exit codes properly**:
+
    ```python
    import sys
    sys.exit(0)  # Success
    sys.exit(1)  # Error
    ```
+
 4. **Handle all exceptions** and print useful error messages
 5. **Test manual runs** before relying on schedules
 6. **Check execution history** regularly to catch recurring failures
@@ -200,5 +214,6 @@ If you're still stuck:
 5. Review the troubleshooting steps above
 
 For scheduled apps that should have run but didn't, check the scheduler debug panel:
+
 - Click the "🐛 Debug" button in the system info bar
 - Verify the schedule is enabled and shows a next run time

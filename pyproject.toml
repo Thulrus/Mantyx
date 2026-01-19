@@ -71,6 +71,50 @@ target-version = ["py310", "py311", "py312"]
 line-length = 100
 target-version = "py310"
 
+[tool.ruff.lint]
+select = [
+    "E",  # pycodestyle errors
+    "F",  # pyflakes
+    "I",  # isort
+    "UP", # pyupgrade
+    "B",  # flake8-bugbear
+]
+ignore = [
+    "E501", # line too long (handled by formatter)
+    "B008", # do not perform function calls in argument defaults (FastAPI Depends pattern)
+    "B904", # raise from - would require refactoring all exception handlers
+    "B025", # duplicate exception - will fix incrementally
+]
+[tool.ruff.lint.per-file-ignores]
+"migrations/*.py" = [
+    "E402",
+] # Module level imports not at top (needed for path manipulation)
+"src/mantyx/core/app_manager.py" = [
+    "F841",
+] # Unused variables (planned for future use)
+"src/mantyx/core/scheduler.py" = [
+    "E712",
+] # Boolean comparison (SQLAlchemy pattern)
+"src/mantyx/core/supervisor.py" = [
+    "E712",
+] # Boolean comparison (SQLAlchemy pattern)
 [tool.mypy]
 python_version = "3.10"
 strict = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "-v",
+    "--strict-markers",
+    "--cov=mantyx",
+    "--cov-report=term-missing",
+    "--cov-report=xml",
+]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests as integration tests",
+]

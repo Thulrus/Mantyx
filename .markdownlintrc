@@ -1,0 +1,18 @@
+# Markdownlint configuration for Mantyx
+# Relaxed rules for documentation
+
+# Allow long lines (common in documentation)
+MD013: false
+
+# Allow inline HTML (used for badges, images)
+MD033: false
+
+# Allow fenced code without language (sometimes used for output)
+MD040: false
+
+# Allow emphasis as heading (for emoji endings)
+MD036: false
+
+# Allow duplicate heading content (common in structured docs)
+MD024:
+  siblings_only: true

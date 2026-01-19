@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 
 class LogLevel(str, enum.Enum):
     """Log severity levels."""
-    
+
     DEBUG = "debug"
     INFO = "info"
     WARNING = "warning"
@@ -28,24 +28,24 @@ class LogLevel(str, enum.Enum):
 class LogEntry(Base):
     """
     Represents a structured log entry.
-    
+
     Used for system-level logging of app lifecycle events,
     not for capturing app stdout/stderr (which goes to files).
     """
-    
+
     __tablename__ = "log_entries"
-    
+
     # Primary key
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    
+
     # Optional foreign key to app (null for system logs)
-    app_id: Mapped[Optional[int]] = mapped_column(
+    app_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("apps.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
     )
-    
+
     # Timestamp
     timestamp: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -53,7 +53,7 @@ class LogEntry(Base):
         nullable=False,
         index=True,
     )
-    
+
     # Log level
     level: Mapped[LogLevel] = mapped_column(
         Enum(LogLevel),
@@ -61,25 +61,25 @@ class LogEntry(Base):
         default=LogLevel.INFO,
         index=True,
     )
-    
+
     # Source component
     source: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
-    
+
     # Log message
     message: Mapped[str] = mapped_column(Text, nullable=False)
-    
+
     # Additional context
-    details: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    
+    details: Mapped[str | None] = mapped_column(Text, nullable=True)
+
     # Execution reference (if related to a specific execution)
-    execution_id: Mapped[Optional[int]] = mapped_column(
+    execution_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("executions.id", ondelete="SET NULL"),
         nullable=True,
     )
-    
+
     # Relationship
     app: Mapped[Optional["App"]] = relationship("App", back_populates="logs")
-    
+
     def __repr__(self) -> str:
         return f"<LogEntry(id={self.id}, level={self.level.value}, source='{self.source}')>"

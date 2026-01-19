@@ -16,16 +16,16 @@ router = APIRouter(prefix="/schedules", tags=["schedules"])
 def get_scheduler() -> AppScheduler:
     """Dependency to get scheduler instance."""
     from mantyx.app import scheduler
+
     if scheduler is None:
-        raise HTTPException(status_code=500,
-                            detail="Scheduler not initialized")
+        raise HTTPException(status_code=500, detail="Scheduler not initialized")
     return scheduler
 
 
 @router.get("", response_model=list[ScheduleResponse])
 def list_schedules(
-        app_id: int | None = None,
-        db: Session = Depends(get_db_session),
+    app_id: int | None = None,
+    db: Session = Depends(get_db_session),
 ):
     """List all schedules."""
     query = db.query(Schedule)
@@ -37,8 +37,8 @@ def list_schedules(
 
 @router.get("/{schedule_id}", response_model=ScheduleResponse)
 def get_schedule(
-        schedule_id: int,
-        db: Session = Depends(get_db_session),
+    schedule_id: int,
+    db: Session = Depends(get_db_session),
 ):
     """Get a specific schedule."""
     schedule = db.query(Schedule).filter(Schedule.id == schedule_id).first()
@@ -49,9 +49,9 @@ def get_schedule(
 
 @router.post("", response_model=ScheduleResponse)
 def create_schedule(
-        schedule_create: ScheduleCreate,
-        db: Session = Depends(get_db_session),
-        scheduler: AppScheduler = Depends(get_scheduler),
+    schedule_create: ScheduleCreate,
+    db: Session = Depends(get_db_session),
+    scheduler: AppScheduler = Depends(get_scheduler),
 ):
     """Create a new schedule."""
     schedule = Schedule(**schedule_create.model_dump())
@@ -67,18 +67,17 @@ def create_schedule(
             # Rollback if scheduler fails
             db.delete(schedule)
             db.commit()
-            raise HTTPException(status_code=500,
-                                detail=f"Failed to add schedule: {e}")
+            raise HTTPException(status_code=500, detail=f"Failed to add schedule: {e}")
 
     return schedule
 
 
 @router.patch("/{schedule_id}", response_model=ScheduleResponse)
 def update_schedule(
-        schedule_id: int,
-        schedule_update: ScheduleUpdate,
-        db: Session = Depends(get_db_session),
-        scheduler: AppScheduler = Depends(get_scheduler),
+    schedule_id: int,
+    schedule_update: ScheduleUpdate,
+    db: Session = Depends(get_db_session),
+    scheduler: AppScheduler = Depends(get_scheduler),
 ):
     """Update a schedule."""
     schedule = db.query(Schedule).filter(Schedule.id == schedule_id).first()
@@ -103,9 +102,9 @@ def update_schedule(
 
 @router.delete("/{schedule_id}")
 def delete_schedule(
-        schedule_id: int,
-        db: Session = Depends(get_db_session),
-        scheduler: AppScheduler = Depends(get_scheduler),
+    schedule_id: int,
+    db: Session = Depends(get_db_session),
+    scheduler: AppScheduler = Depends(get_scheduler),
 ):
     """Delete a schedule."""
     schedule = db.query(Schedule).filter(Schedule.id == schedule_id).first()
@@ -123,9 +122,9 @@ def delete_schedule(
 
 @router.post("/{schedule_id}/enable")
 def enable_schedule(
-        schedule_id: int,
-        db: Session = Depends(get_db_session),
-        scheduler: AppScheduler = Depends(get_scheduler),
+    schedule_id: int,
+    db: Session = Depends(get_db_session),
+    scheduler: AppScheduler = Depends(get_scheduler),
 ):
     """Enable a schedule."""
     schedule = db.query(Schedule).filter(Schedule.id == schedule_id).first()
@@ -142,9 +141,9 @@ def enable_schedule(
 
 @router.post("/{schedule_id}/disable")
 def disable_schedule(
-        schedule_id: int,
-        db: Session = Depends(get_db_session),
-        scheduler: AppScheduler = Depends(get_scheduler),
+    schedule_id: int,
+    db: Session = Depends(get_db_session),
+    scheduler: AppScheduler = Depends(get_scheduler),
 ):
     """Disable a schedule."""
     schedule = db.query(Schedule).filter(Schedule.id == schedule_id).first()
@@ -160,6 +159,8 @@ def disable_schedule(
 
 
 @router.get("/debug/scheduler-status")
-def get_scheduler_status(scheduler: AppScheduler = Depends(get_scheduler), ):
+def get_scheduler_status(
+    scheduler: AppScheduler = Depends(get_scheduler),
+):
     """Get detailed scheduler status for debugging."""
     return scheduler.get_scheduler_status()

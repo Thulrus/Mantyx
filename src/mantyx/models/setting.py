@@ -2,8 +2,6 @@
 Setting model for storing application-wide configuration.
 """
 
-from typing import Optional
-
 from sqlalchemy import String
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -25,8 +23,7 @@ class Setting(Base, TimestampMixin):
     value: Mapped[str] = mapped_column(String(500), nullable=False)
 
     # Optional description
-    description: Mapped[Optional[str]] = mapped_column(String(500),
-                                                       nullable=True)
+    description: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
     def __repr__(self) -> str:
         return f"<Setting(key='{self.key}', value='{self.value}')>"

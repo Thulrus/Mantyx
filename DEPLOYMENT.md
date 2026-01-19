@@ -9,6 +9,7 @@ Deploy Mantyx to your server with a single command:
 ```
 
 The script automatically:
+
 - ✓ Detects if this is initial setup or an update
 - ✓ Sets up systemd service (initial setup only)
 - ✓ Preserves all app data during updates
@@ -18,11 +19,13 @@ The script automatically:
 ## Prerequisites
 
 1. **SSH key access** to the remote server:
+
    ```bash
    ssh-copy-id user@YOUR_SERVER_IP
    ```
 
 2. **Python 3.12+** installed on the server:
+
    ```bash
    ssh user@YOUR_SERVER_IP 'python3 --version'
    ```
@@ -84,6 +87,7 @@ See `migrations/README.md` for details on the migration system.
 ## What Gets Preserved
 
 During updates, these are **never** touched:
+
 - ✓ Installed apps and their code
 - ✓ App virtual environments
 - ✓ Database (schedules, execution history)
@@ -104,9 +108,11 @@ http://YOUR_SERVER_IP:8420
 ### View Logs in Real-Time
 
 From VS Code:
+
 - Run Task → "Mantyx: View Remote Logs"
 
 From terminal:
+
 ```bash
 ssh user@YOUR_SERVER_IP 'sudo journalctl -u mantyx -f'
 ```
@@ -128,12 +134,14 @@ ssh user@YOUR_SERVER_IP 'sudo systemctl restart mantyx'
 ### Deployment Fails: SSH Connection
 
 Check connectivity:
+
 ```bash
 ping YOUR_SERVER_IP
 ssh user@YOUR_SERVER_IP 'echo Connection OK'
 ```
 
 Set up SSH key if needed:
+
 ```bash
 ssh-copy-id user@YOUR_SERVER_IP
 ```
@@ -141,11 +149,13 @@ ssh-copy-id user@YOUR_SERVER_IP
 ### Service Won't Start
 
 View detailed error logs:
+
 ```bash
 ssh user@YOUR_SERVER_IP 'sudo journalctl -u mantyx -n 100 --no-pager'
 ```
 
 Check Python version:
+
 ```bash
 ssh user@YOUR_SERVER_IP '/path/to/mantyx/.venv/bin/python --version'
 ```
@@ -153,6 +163,7 @@ ssh user@YOUR_SERVER_IP '/path/to/mantyx/.venv/bin/python --version'
 ### Port 8420 Not Accessible
 
 Open firewall on server:
+
 ```bash
 ssh user@YOUR_SERVER_IP 'sudo ufw allow 8420/tcp'
 ```

@@ -1,4 +1,4 @@
-.PHONY: help install dev run test format lint clean migrate db-upgrade db-downgrade pre-commit
+.PHONY: help install dev setup check-env run test format lint clean migrate db-upgrade db-downgrade pre-commit
 
 help:  ## Show this help message
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
@@ -9,6 +9,12 @@ install:  ## Install production dependencies
 dev:  ## Install development dependencies
 	pip install -e ".[dev]"
 	pre-commit install
+
+setup:  ## Full development environment setup
+	./scripts/setup-dev.sh
+
+check-env:  ## Check development environment health
+	./scripts/check-env.sh
 
 run:  ## Run the Mantyx server
 	python -m mantyx

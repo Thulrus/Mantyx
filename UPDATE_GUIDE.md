@@ -3,6 +3,7 @@
 ## Overview
 
 Mantyx now supports updating applications without having to delete and recreate them. This preserves:
+
 - ✓ App configuration and environment variables
 - ✓ Schedules and execution history
 - ✓ Process settings (restart policy, health checks, etc.)
@@ -29,6 +30,7 @@ Best for apps you develop locally:
    - Restart the app if it was running
 
 **Example workflow:**
+
 ```bash
 # Make changes to your app
 vim my-weather-app/weather_fetch.py
@@ -45,6 +47,7 @@ zip -r weather-app-update.zip .
 Best for apps hosted on GitHub:
 
 1. Push your changes to your GitHub repository
+
    ```bash
    git add .
    git commit -m "Improved weather parsing"
@@ -96,6 +99,7 @@ Backups are **enabled by default** and highly recommended:
 - **Retention**: Manual cleanup (not auto-deleted)
 
 To restore from backup:
+
 ```bash
 # SSH to server
 cd /path/to/mantyx/mantyx_data/backups/my-app
@@ -120,6 +124,7 @@ cp -r 20260118_144500/app/* ../apps/my-app/app/
 | App Name              | Must stay same | Can change          |
 
 **When to use Delete+Recreate:**
+
 - Changing app name
 - Switching between PERPETUAL ↔ SCHEDULED types
 - Major refactor where you want a fresh start
@@ -129,6 +134,7 @@ cp -r 20260118_144500/app/* ../apps/my-app/app/
 For programmatic updates:
 
 ### Update from ZIP
+
 ```bash
 curl -X POST http://localhost:8420/api/apps/{app_id}/update/zip \
   -F "file=@my-app-v2.zip" \
@@ -136,6 +142,7 @@ curl -X POST http://localhost:8420/api/apps/{app_id}/update/zip \
 ```
 
 ### Pull from Git
+
 ```bash
 curl -X POST http://localhost:8420/api/apps/{app_id}/update/git \
   -F "backup=true"
@@ -146,6 +153,7 @@ curl -X POST http://localhost:8420/api/apps/{app_id}/update/git \
 ### Update fails: "Dependencies installation failed"
 
 Check if your requirements.txt is valid:
+
 ```bash
 # Test locally
 pip install -r requirements.txt
@@ -161,12 +169,14 @@ pip install -r requirements.txt
 ### "No changes detected" for Git update
 
 This is normal! It means your repository is already at the latest commit. To verify:
+
 - Check your Git repo's latest commit hash
 - Compare with commit hash shown in app details
 
 ### Version number not incrementing
 
 Version only increments when:
+
 - ✓ Update completes successfully
 - ✓ For Git: actual changes detected
 - ✗ Update fails partway through
@@ -212,6 +222,7 @@ Typical development cycle:
 ## Future Enhancements
 
 Planned features (not yet implemented):
+
 - Rollback to previous version from UI
 - Update notifications (detect available updates for Git apps)
 - Batch update multiple apps

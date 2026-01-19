@@ -13,6 +13,7 @@ repos:
       - id: check-yaml
       - id: check-toml
       - id: check-json
+        exclude: ^\.vscode/.*\.json$  # VS Code config files use JSONC (JSON with comments)
       - id: check-added-large-files
         args: [--maxkb=500]
       - id: check-merge-conflict
@@ -36,13 +37,13 @@ repos:
       - id: isort
         args: [--profile=black, --line-length=100]
 
-  # Linting
-  - repo: https://github.com/pycqa/flake8
-    rev: 7.0.0
+  # Linting with Ruff (fast Python linter)
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.4
     hooks:
-      - id: flake8
-        args: [--max-line-length=100, --extend-ignore=E203, W503]
-        additional_dependencies: [flake8-docstrings]
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+      - id: ruff-format
 
   # Type checking (optional - can be slow)
   # - repo: https://github.com/pre-commit/mirrors-mypy
@@ -57,12 +58,12 @@ repos:
     rev: 1.7.7
     hooks:
       - id: bandit
-        args: [-ll, -r, src/]
-        files: ^src/
+        args: [-c, .bandit, -r, src/]
+        pass_filenames: false
 
   # Markdown linting
   - repo: https://github.com/igorshubovych/markdownlint-cli
     rev: v0.39.0
     hooks:
       - id: markdownlint
-        args: [--fix]
+        args: [--fix, --config, .markdownlintrc]

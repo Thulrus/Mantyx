@@ -11,7 +11,7 @@ DEPLOY_CONFIG="${SCRIPT_DIR}/.deploy.env"
 if [ -f "$DEPLOY_CONFIG" ]; then
     # Source the config file
     source "$DEPLOY_CONFIG"
-    
+
     # Use config values as defaults if arguments not provided
     REMOTE_TARGET="${1:-$DEPLOY_TARGET}"
     REMOTE_PATH="${2:-$DEPLOY_PATH}"
@@ -101,22 +101,22 @@ show_usage() {
 
 check_ssh() {
     log_step "Checking SSH connectivity to ${REMOTE_USER}@${REMOTE_HOST}..."
-    
+
     # Test SSH connection
     if ! ssh -o ConnectTimeout=5 "${REMOTE_USER}@${REMOTE_HOST}" 'exit' 2>/dev/null; then
         log_error "SSH connection failed"
         exit 1
     fi
-    
+
     log_info "SSH connection OK"
-    
+
     # Check if using password authentication
     if ssh -o BatchMode=yes -o ConnectTimeout=2 "${REMOTE_USER}@${REMOTE_HOST}" 'exit' 2>&1 | grep -q "Permission denied"; then
         log_warn "Password authentication detected. For better experience, set up SSH key:"
         echo "  ssh-copy-id ${REMOTE_USER}@${REMOTE_HOST}"
         echo ""
     fi
-    
+
     # Check sudo access
     log_step "Checking sudo access..."
     if ! ssh "${REMOTE_USER}@${REMOTE_HOST}" "sudo -n true" 2>/dev/null; then
@@ -125,10 +125,10 @@ check_ssh() {
         echo "Please enter your password when prompted to configure passwordless sudo."
         echo "This only needs to be done once."
         echo ""
-        
+
         # Add user to sudoers for systemd commands
         ssh -t "${REMOTE_USER}@${REMOTE_HOST}" "echo '${REMOTE_USER} ALL=(ALL) NOPASSWD: /usr/bin/systemctl, /bin/systemctl, /usr/bin/journalctl, /bin/journalctl' | sudo tee /etc/sudoers.d/mantyx-deploy > /dev/null && sudo chmod 440 /etc/sudoers.d/mantyx-deploy"
-        
+
         if [ $? -eq 0 ]; then
             log_info "Passwordless sudo configured"
         else
@@ -151,41 +151,41 @@ check_remote_setup() {
 
 initial_setup() {
     log_info "Performing initial setup on ${REMOTE_HOST}..."
-    
+
     log_step "Creating directory structure..."
     ssh "${REMOTE_USER}@${REMOTE_HOST}" "mkdir -p '${REMOTE_PATH}'"
-    
+
     log_step "Syncing all files to server..."
     rsync -avz --exclude='.git/' --exclude='dev_data/' --exclude='.venv/' --exclude='__pycache__/' \
         ./ "${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_PATH}/"
-    
+
     log_step "Creating virtual environment on server..."
     ssh "${REMOTE_USER}@${REMOTE_HOST}" "cd '${REMOTE_PATH}' && python3 -m venv .venv"
-    
+
     log_step "Installing Mantyx and dependencies..."
     ssh "${REMOTE_USER}@${REMOTE_HOST}" "cd '${REMOTE_PATH}' && .venv/bin/pip install -e . --quiet"
-    
+
     log_step "Creating mantyx_data directory..."
     ssh "${REMOTE_USER}@${REMOTE_HOST}" "mkdir -p '${REMOTE_PATH}/mantyx_data'/{apps,venvs,logs,backups,temp,config,data}"
-    
+
     log_step "Setting up systemd service..."
     setup_systemd
-    
+
     log_info "Initial setup complete!"
 }
 
 deploy_update() {
     log_info "Deploying code updates to ${REMOTE_HOST}..."
-    
+
     log_step "Syncing code changes..."
     rsync -avz --delete \
         --exclude='.git/' --exclude='dev_data/' --exclude='.venv/' \
         --exclude='__pycache__/' --exclude='*.pyc' --exclude='mantyx_data/' \
         ./ "${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_PATH}/"
-    
+
     log_step "Updating dependencies..."
     ssh "${REMOTE_USER}@${REMOTE_HOST}" "cd '${REMOTE_PATH}' && .venv/bin/pip install -e . --quiet"
-    
+
     log_step "Running database migrations..."
     # Run migrations if they exist
     if ssh "${REMOTE_USER}@${REMOTE_HOST}" "[ -d '${REMOTE_PATH}/migrations' ]"; then
@@ -200,7 +200,7 @@ deploy_update() {
             done
         "
     fi
-    
+
     # Check if service exists
     if ! ssh "${REMOTE_USER}@${REMOTE_HOST}" "sudo systemctl list-unit-files ${SERVICE_NAME}.service" 2>/dev/null | grep -q "${SERVICE_NAME}"; then
         log_warn "Systemd service not found - setting it up..."
@@ -209,13 +209,13 @@ deploy_update() {
         log_step "Restarting Mantyx service..."
         ssh "${REMOTE_USER}@${REMOTE_HOST}" "sudo systemctl restart ${SERVICE_NAME}"
     fi
-    
+
     log_info "Update complete!"
 }
 
 setup_systemd() {
     log_step "Creating systemd service file..."
-    
+
     # Create service file content
     cat > /tmp/mantyx.service <<EOF
 [Unit]
@@ -236,27 +236,27 @@ RestartSec=3
 [Install]
 WantedBy=multi-user.target
 EOF
-    
+
     # Copy to server and install
     scp /tmp/mantyx.service "${REMOTE_USER}@${REMOTE_HOST}:/tmp/"
     rm /tmp/mantyx.service
-    
+
     ssh -t "${REMOTE_USER}@${REMOTE_HOST}" "sudo mv /tmp/mantyx.service /etc/systemd/system/ && \
         sudo systemctl daemon-reload && \
         sudo systemctl enable ${SERVICE_NAME} && \
         sudo systemctl start ${SERVICE_NAME}"
-    
+
     log_info "Systemd service configured and started"
 }
 
 check_service() {
     log_step "Checking service status..."
     sleep 3  # Give service time to start
-    
+
     if ssh "${REMOTE_USER}@${REMOTE_HOST}" "sudo systemctl is-active --quiet ${SERVICE_NAME}"; then
         log_info "${GREEN}✓ Mantyx service is running${NC}"
         log_info "${GREEN}✓ Access web interface at: http://${REMOTE_HOST}:8420${NC}"
-        
+
         # Show service status
         echo ""
         ssh "${REMOTE_USER}@${REMOTE_HOST}" "sudo systemctl status ${SERVICE_NAME} --no-pager -l" | head -n 10
@@ -278,14 +278,14 @@ main() {
         show_usage
         exit 0
     fi
-    
+
     echo ""
     log_info "Mantyx Deployment Script"
     log_info "Target: ${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_PATH}"
     echo ""
-    
+
     check_ssh
-    
+
     if check_remote_setup; then
         log_info "Existing installation detected - performing update"
         deploy_update
@@ -293,9 +293,9 @@ main() {
         log_info "No existing installation - performing initial setup"
         initial_setup
     fi
-    
+
     check_service
-    
+
     echo ""
     log_info "${GREEN}Deployment successful!${NC}"
     echo ""

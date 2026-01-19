@@ -4,6 +4,25 @@ Thank you for your interest in contributing to Mantyx! This document provides gu
 
 ## Getting Started
 
+### Quick Setup (Recommended)
+
+Use our setup script to configure everything automatically:
+
+```bash
+./scripts/setup-dev.sh
+```
+
+This will:
+
+- Check Python version
+- Create virtual environment
+- Install all dependencies
+- Configure pre-commit hooks
+- Create development directories
+- Run tests to verify setup
+
+### Manual Setup
+
 1. Fork the repository
 2. Clone your fork: `git clone https://github.com/yourusername/Mantyx.git`
 3. Create a virtual environment: `python -m venv .venv`
@@ -11,11 +30,21 @@ Thank you for your interest in contributing to Mantyx! This document provides gu
 5. Install development dependencies: `pip install -e ".[dev]"`
 6. Install pre-commit hooks: `pre-commit install`
 
+### Environment Health Check
+
+Verify your setup at any time:
+
+```bash
+./scripts/check-env.sh
+```
+
+This checks Python version, dependencies, pre-commit hooks, and more.
+
 ## Development Workflow
 
 ### Setting Up Pre-commit Hooks
 
-We use pre-commit hooks to maintain code quality:
+We use pre-commit hooks to maintain code quality. These are automatically installed by `./scripts/setup-dev.sh`, or install manually:
 
 ```bash
 pip install pre-commit
@@ -26,11 +55,14 @@ This will automatically run checks before each commit. You can also run manually
 
 ```bash
 pre-commit run --all-files
+# or
+make pre-commit
 ```
 
 ### Code Style
 
 - **Python**: We use Black (100 char lines) and isort
+- **Linting**: Ruff for fast, comprehensive linting
 - **Type hints**: Required for all function signatures
 - **Docstrings**: Use Google-style docstrings for public APIs
 - **Naming**: Follow PEP 8 conventions
@@ -38,11 +70,16 @@ pre-commit run --all-files
 ### Running the Development Server
 
 ```bash
-# From project root
+# Using make
+make run
+
+# Or directly
 python -m mantyx
+
+# Or via VS Code task: "Mantyx: Run Development Server"
 ```
 
-Access the web UI at http://localhost:8420
+Access the web UI at <http://localhost:8420>
 
 ### Database Migrations
 

@@ -13,7 +13,6 @@ from fastapi.staticfiles import StaticFiles
 
 from mantyx.api import apps, executions, schedules, settings
 from mantyx.config import get_settings
-from mantyx.core.app_manager import AppManager
 from mantyx.core.scheduler import AppScheduler
 from mantyx.core.supervisor import ProcessSupervisor
 from mantyx.database import init_db
@@ -123,8 +122,7 @@ async def health():
     """Health check endpoint."""
     return {
         "status": "healthy",
-        "scheduler_running":
-        scheduler._scheduler.running if scheduler else False,
+        "scheduler_running": scheduler._scheduler.running if scheduler else False,
     }
 
 

@@ -7,7 +7,6 @@ variables and configuration files.
 
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 from zoneinfo import ZoneInfo
 
 from pydantic import Field, field_validator
@@ -19,20 +18,21 @@ def get_system_timezone() -> str:
     try:
         # Try to get local timezone name
         import time
-        if hasattr(time, 'tzname') and time.tzname:
+
+        if hasattr(time, "tzname") and time.tzname:
             # This gives us something like ('EST', 'EDT')
             # We want a proper IANA timezone name
             pass
 
         # Better approach: use datetime to detect timezone
         local_tz = datetime.now().astimezone().tzinfo
-        if local_tz and hasattr(local_tz, 'key'):
+        if local_tz and hasattr(local_tz, "key"):
             # type: ignore - tzinfo doesn't officially have 'key' but ZoneInfo does
             return local_tz.key  # type: ignore
 
         # Fallback to reading /etc/timezone on Linux
         try:
-            with open('/etc/timezone', 'r', encoding='utf-8') as f:
+            with open("/etc/timezone", encoding="utf-8") as f:
                 tz = f.read().strip()
                 if tz:
                     # Validate it's a valid timezone
@@ -44,9 +44,10 @@ def get_system_timezone() -> str:
         # Another fallback: symlink /etc/localtime
         try:
             import os
-            localtime_path = os.path.realpath('/etc/localtime')
-            if 'zoneinfo/' in localtime_path:
-                tz = localtime_path.split('zoneinfo/')[-1]
+
+            localtime_path = os.path.realpath("/etc/localtime")
+            if "zoneinfo/" in localtime_path:
+                tz = localtime_path.split("zoneinfo/")[-1]
                 ZoneInfo(tz)
                 return tz
         except (OSError, ValueError):
@@ -76,7 +77,7 @@ class Settings(BaseSettings):
     )
 
     # Database
-    database_url: Optional[str] = Field(
+    database_url: str | None = Field(
         default=None,
         description="Database URL. Defaults to SQLite in data directory",
     )
@@ -211,7 +212,7 @@ class Settings(BaseSettings):
 
 
 # Global settings instance
-_settings: Optional[Settings] = None
+_settings: Settings | None = None
 
 
 def get_settings() -> Settings:

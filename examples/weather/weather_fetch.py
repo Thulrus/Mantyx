@@ -51,23 +51,20 @@ WEATHER_CODES = {
 def fetch_weather():
     url = "https://api.open-meteo.com/v1/forecast"
     params = {
-        "latitude":
-        LATITUDE,
-        "longitude":
-        LONGITUDE,
+        "latitude": LATITUDE,
+        "longitude": LONGITUDE,
         "daily": [
-            "weathercode", "temperature_2m_max", "temperature_2m_min",
-            "precipitation_probability_max", "precipitation_sum",
-            "windspeed_10m_max"
+            "weathercode",
+            "temperature_2m_max",
+            "temperature_2m_min",
+            "precipitation_probability_max",
+            "precipitation_sum",
+            "windspeed_10m_max",
         ],
-        "temperature_unit":
-        "fahrenheit",
-        "windspeed_unit":
-        "mph",
-        "precipitation_unit":
-        "inch",
-        "timezone":
-        TIMEZONE
+        "temperature_unit": "fahrenheit",
+        "windspeed_unit": "mph",
+        "precipitation_unit": "inch",
+        "timezone": TIMEZONE,
     }
 
     response = requests.get(url, params=params, timeout=10)
@@ -114,15 +111,17 @@ def format_message_old(weather):
 
     advice = build_advice(temp_high, precip_prob, wind)
 
-    message = (f"Good morning.\n\n"
-               f"Here is your weather forecast for {date_str}:\n\n"
-               f"Conditions: {conditions}\n"
-               f"High: {temp_high:.0f}°F\n"
-               f"Low: {temp_low:.0f}°F\n"
-               f"Wind: Up to {wind:.0f} mph\n"
-               f"Chance of precipitation: {precip_prob}%\n"
-               f"Expected precipitation: {precip_sum:.2f} in\n\n"
-               f"{advice}")
+    message = (
+        f"Good morning.\n\n"
+        f"Here is your weather forecast for {date_str}:\n\n"
+        f"Conditions: {conditions}\n"
+        f"High: {temp_high:.0f}°F\n"
+        f"Low: {temp_low:.0f}°F\n"
+        f"Wind: Up to {wind:.0f} mph\n"
+        f"Chance of precipitation: {precip_prob}%\n"
+        f"Expected precipitation: {precip_sum:.2f} in\n\n"
+        f"{advice}"
+    )
 
     return message.strip()
 
@@ -148,7 +147,7 @@ def format_message(weather):
     # Emoji selection
     if weather_code in (0, 1):
         sky_emoji = "☀️"
-    elif weather_code in (2, ):
+    elif weather_code in (2,):
         sky_emoji = "⛅"
     elif weather_code in (3, 45, 48):
         sky_emoji = "☁️"
@@ -171,24 +170,27 @@ def format_message(weather):
     else:
         headline = "A pretty typical day overall."
 
-    wind = "" if wind == 0 else (f"💨 Wind\n"
-                                 f"Up to {wind:.0f} mph\n\n")
+    wind = "" if wind == 0 else (f"💨 Wind\n" f"Up to {wind:.0f} mph\n\n")
 
-    rain = "" if precip_prob == 0 else (f"🌧️ Rain\n"
-                                        f"Chance: {precip_prob}%\n"
-                                        f"Expected: {precip_sum:.2f} in\n\n")
+    rain = (
+        ""
+        if precip_prob == 0
+        else (f"🌧️ Rain\n" f"Chance: {precip_prob}%\n" f"Expected: {precip_sum:.2f} in\n\n")
+    )
 
-    message = (f"{sky_emoji} Good morning!\n"
-               f"{headline}\n\n"
-               f"📅 {date_str}\n"
-               f"{conditions}\n\n"
-               f"🌡️ Temperatures\n"
-               f"High: {temp_high:.0f}°F\n"
-               f"Low: {temp_low:.0f}°F\n\n"
-               f"{wind}"
-               f"{rain}"
-               f"💡 {advice}\n"
-               f"Have a great day out there!")
+    message = (
+        f"{sky_emoji} Good morning!\n"
+        f"{headline}\n\n"
+        f"📅 {date_str}\n"
+        f"{conditions}\n\n"
+        f"🌡️ Temperatures\n"
+        f"High: {temp_high:.0f}°F\n"
+        f"Low: {temp_low:.0f}°F\n\n"
+        f"{wind}"
+        f"{rain}"
+        f"💡 {advice}\n"
+        f"Have a great day out there!"
+    )
 
     return message
 

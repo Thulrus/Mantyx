@@ -2,6 +2,31 @@
     "version": "2.0.0",
     "tasks": [
         {
+            "label": "Mantyx: Setup Development Environment",
+            "type": "shell",
+            "command": "${workspaceFolder}/scripts/setup-dev.sh",
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated",
+                "focus": true
+            },
+            "runOptions": {
+                "runOn": "folderOpen"
+            }
+        },
+        {
+            "label": "Mantyx: Check Environment",
+            "type": "shell",
+            "command": "${workspaceFolder}/scripts/check-env.sh",
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared",
+                "focus": true
+            }
+        },
+        {
             "label": "Mantyx: Run Development Server",
             "type": "shell",
             "command": "${workspaceFolder}/.venv/bin/python",
@@ -75,6 +100,20 @@
             "args": [
                 "src/mantyx",
                 "examples"
+            ],
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            }
+        },
+        {
+            "label": "Mantyx: Run Pre-commit",
+            "type": "shell",
+            "command": "${workspaceFolder}/.venv/bin/pre-commit",
+            "args": [
+                "run",
+                "--all-files"
             ],
             "problemMatcher": [],
             "presentation": {

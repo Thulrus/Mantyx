@@ -1,9 +1,11 @@
 # Virtual Environment Setup
 
 ## Overview
+
 This project uses a Python virtual environment (`.venv`) to isolate dependencies from the system Python installation.
 
 ## Status
+
 ✅ Virtual environment is set up and configured  
 ✅ All dependencies installed  
 ✅ VS Code configured to use `.venv`  
@@ -12,12 +14,15 @@ This project uses a Python virtual environment (`.venv`) to isolate dependencies
 ## Using the Virtual Environment
 
 ### Automatic Activation
+
 VS Code will automatically use the `.venv` interpreter when:
+
 - Running tasks (Ctrl+Shift+B)
 - Debugging (F5)
 - Using the integrated terminal (if `python.terminal.activateEnvironment` is enabled)
 
 ### Manual Activation
+
 If you need to activate the venv manually in a terminal:
 
 ```bash
@@ -31,11 +36,13 @@ source .venv/bin/activate
 ### Running Commands
 
 #### With VS Code Tasks (Recommended)
+
 - **Run Server**: Press `Ctrl+Shift+B` or select "Mantyx: Run Development Server"
 - **Run Tests**: `Ctrl+Shift+T` or "Mantyx: Run Tests"
 - **Debug**: Press `F5` to start debugging
 
 #### Direct Command Execution
+
 ```bash
 # Using absolute path (works from any directory)
 /home/geoff/Ghowe/Documents/Mantyx/.venv/bin/python -m mantyx.cli run
@@ -50,6 +57,7 @@ python -m mantyx.cli run
 ## Installed Packages
 
 ### Core Dependencies
+
 - fastapi>=0.109.0 - Web framework
 - uvicorn>=0.27.0 - ASGI server
 - sqlalchemy>=2.0.0 - ORM
@@ -66,6 +74,7 @@ python -m mantyx.cli run
 - httpx>=0.26.0 - HTTP client
 
 ### Development Dependencies
+
 - pytest>=7.4.0 - Testing framework
 - pytest-asyncio>=0.23.0 - Async test support
 - pytest-cov>=4.1.0 - Coverage reporting
@@ -76,12 +85,15 @@ python -m mantyx.cli run
 ## Managing Dependencies
 
 ### Installing Additional Packages
+
 ```bash
 .venv/bin/pip install package-name
 ```
 
 ### Updating pyproject.toml
+
 After installing new packages, add them to `pyproject.toml`:
+
 ```toml
 [project]
 dependencies = [
@@ -90,6 +102,7 @@ dependencies = [
 ```
 
 ### Reinstalling All Dependencies
+
 ```bash
 .venv/bin/pip install -e .[dev]
 ```
@@ -99,35 +112,46 @@ Or use the VS Code task: "Mantyx: Install Dev Dependencies"
 ## Troubleshooting
 
 ### "ModuleNotFoundError: No module named 'mantyx'"
+
 **Solution**: The package needs to be installed in editable mode:
+
 ```bash
 .venv/bin/pip install -e .[dev]
 ```
+
 Or use the task: "Mantyx: Install Dev Dependencies"
 
 ### VS Code Not Using .venv
-**Solution**: 
+
+**Solution**:
+
 1. Open Command Palette (Ctrl+Shift+P)
 2. Type "Python: Select Interpreter"
 3. Choose `.venv/bin/python`
 
 ### Packages Installing to System Python
+
 **Solution**: Always use `.venv/bin/pip` instead of just `pip`, or ensure venv is activated first.
 
 ### Tasks Failing with "Command not found"
+
 **Solution**: All tasks are configured to use absolute paths to venv executables. If you see this error:
+
 1. Check that `.venv` exists: `ls -la .venv/bin/`
 2. Reinstall dependencies: `.venv/bin/pip install -e .[dev]`
 
 ## VS Code Configuration
 
 ### settings.json
+
 - Python interpreter: `${workspaceFolder}/.venv/bin/python`
 - Auto-activation enabled for terminals
 - File exclusions: `.venv` hidden from explorer
 
 ### tasks.json
+
 All tasks use absolute paths:
+
 - `${workspaceFolder}/.venv/bin/python`
 - `${workspaceFolder}/.venv/bin/pip`
 - `${workspaceFolder}/.venv/bin/pytest`
@@ -136,7 +160,9 @@ All tasks use absolute paths:
 - `${workspaceFolder}/.venv/bin/mypy`
 
 ### launch.json
+
 All debug configurations specify:
+
 ```json
 "python": "${workspaceFolder}/.venv/bin/python"
 ```

@@ -11,6 +11,7 @@
 All core requirements from the specification have been implemented:
 
 ### ✅ Core Features
+
 - [x] Full app lifecycle states (uploaded, installed, enabled, disabled, running, stopped, failed, deleted)
 - [x] Multiple upload methods (ZIP, Git repository)
 - [x] Dependency isolation via virtual environments
@@ -23,6 +24,7 @@ All core requirements from the specification have been implemented:
 - [x] Soft and hard delete options
 
 ### ✅ Web Interface
+
 - [x] Dark theme using CSS variables
 - [x] Responsive dashboard with statistics
 - [x] App upload (ZIP and Git)
@@ -32,6 +34,7 @@ All core requirements from the specification have been implemented:
 - [x] Schedule management
 
 ### ✅ REST API
+
 - [x] Complete CRUD operations for apps
 - [x] Start/stop/restart controls
 - [x] Schedule management
@@ -40,6 +43,7 @@ All core requirements from the specification have been implemented:
 - [x] OpenAPI documentation at /docs
 
 ### ✅ System Integration
+
 - [x] Systemd service file
 - [x] Configuration via environment variables
 - [x] CLI entry point
@@ -114,6 +118,7 @@ Mantyx/
 ## Architecture Components
 
 ### 1. Database Layer (`models/`, `database.py`)
+
 - **SQLAlchemy 2.0** with modern typing
 - Five main models: App, Execution, Schedule, LogEntry
 - Automatic timestamp tracking
@@ -123,6 +128,7 @@ Mantyx/
 ### 2. Core Business Logic (`core/`)
 
 #### App Manager
+
 - Handles ZIP and Git uploads
 - Creates app directories and metadata
 - Manages installations and updates
@@ -130,12 +136,14 @@ Mantyx/
 - Coordinates with other managers
 
 #### Virtual Environment Manager
+
 - Creates isolated Python environments
 - Installs dependencies from requirements.txt
 - Lists installed packages
 - Manages environment lifecycle
 
 #### Process Supervisor
+
 - Starts/stops/restarts perpetual apps
 - Monitors process health
 - Implements restart policies (never, always, on-failure)
@@ -143,6 +151,7 @@ Mantyx/
 - Handles graceful shutdown
 
 #### Scheduler
+
 - Integrates APScheduler with persistent job store
 - Supports cron expressions and intervals
 - Executes scheduled apps in isolated processes
@@ -150,6 +159,7 @@ Mantyx/
 - Updates execution history
 
 ### 3. REST API (`api/`)
+
 - **FastAPI** framework with async support
 - Pydantic schemas for validation
 - Dependency injection for managers
@@ -158,6 +168,7 @@ Mantyx/
 - OpenAPI auto-documentation
 
 ### 4. Web Interface (`web/`)
+
 - Single-page application
 - Vanilla JavaScript (no framework dependencies)
 - Dark theme with CSS variables
@@ -170,7 +181,9 @@ Mantyx/
 ## Key Design Decisions
 
 ### 1. State Machine
+
 Apps follow a strict state machine:
+
 ```
 uploaded → installed → enabled → running
                      ↓           ↓
@@ -180,18 +193,21 @@ uploaded → installed → enabled → running
 ```
 
 ### 2. Process Isolation
+
 - Apps run in separate processes (not threads)
 - Each app has its own virtual environment
 - No code executes in the orchestrator process
 - Clean separation via subprocess
 
 ### 3. Data Persistence
+
 - SQLite for simplicity (can use PostgreSQL)
 - File-based logs for app output
 - JSON/YAML for app configuration
 - Backups stored in timestamped directories
 
 ### 4. Safety Mechanisms
+
 - Explicit state transitions
 - Backup before updates
 - Path traversal prevention
@@ -204,6 +220,7 @@ uploaded → installed → enabled → running
 ## API Endpoints
 
 ### Apps
+
 - `GET /api/apps` - List all apps
 - `GET /api/apps/{id}` - Get app details
 - `POST /api/apps/upload/zip` - Upload ZIP
@@ -219,12 +236,14 @@ uploaded → installed → enabled → running
 - `GET /api/apps/{id}/status` - Get status
 
 ### Executions
+
 - `GET /api/executions` - List executions
 - `GET /api/executions/{id}` - Get execution details
 - `GET /api/executions/{id}/stdout` - View stdout
 - `GET /api/executions/{id}/stderr` - View stderr
 
 ### Schedules
+
 - `GET /api/schedules` - List schedules
 - `GET /api/schedules/{id}` - Get schedule
 - `POST /api/schedules` - Create schedule
@@ -259,6 +278,7 @@ MANTYX_BACKUP_RETENTION_COUNT # Backup retention
 ## Testing Strategy
 
 ### Manual Testing Checklist
+
 - [ ] Upload ZIP file
 - [ ] Clone Git repository
 - [ ] Install app with dependencies
@@ -274,6 +294,7 @@ MANTYX_BACKUP_RETENTION_COUNT # Backup retention
 - [ ] Health checks
 
 ### Integration Tests (Future)
+
 - App lifecycle workflows
 - Schedule execution
 - Process supervision
@@ -285,6 +306,7 @@ MANTYX_BACKUP_RETENTION_COUNT # Backup retention
 ## Deployment
 
 ### Development
+
 ```bash
 python3 -m venv venv
 source venv/bin/activate
@@ -294,6 +316,7 @@ mantyx run
 ```
 
 ### Production (Systemd)
+
 ```bash
 sudo useradd -r mantyx
 sudo mkdir -p /srv/mantyx
@@ -308,12 +331,14 @@ sudo systemctl start mantyx
 ## Future Enhancements
 
 ### Short Term
+
 - [ ] Real-time log streaming via WebSockets
 - [ ] Resource usage metrics (CPU, memory)
 - [ ] Email notifications for failures
 - [ ] App templates/marketplace
 
 ### Long Term
+
 - [ ] Docker container support
 - [ ] Multi-node clustering
 - [ ] Built-in authentication
@@ -325,6 +350,7 @@ sudo systemctl start mantyx
 ## Dependencies
 
 ### Core
+
 - fastapi>=0.109.0 - Web framework
 - uvicorn>=0.27.0 - ASGI server
 - sqlalchemy>=2.0.0 - ORM
@@ -334,6 +360,7 @@ sudo systemctl start mantyx
 - gitpython>=3.1.0 - Git integration
 
 ### Development
+
 - pytest - Testing
 - black - Code formatting
 - ruff - Linting
@@ -344,12 +371,14 @@ sudo systemctl start mantyx
 ## Security Notes
 
 Mantyx is designed for **trusted environments**:
+
 - No multi-tenancy
 - No app sandboxing
 - No built-in authentication
 - Assumes trusted app sources
 
 For production:
+
 - Deploy behind reverse proxy
 - Add authentication layer
 - Use firewall rules

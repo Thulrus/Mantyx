@@ -314,13 +314,13 @@ function renderApps() {
                 </div>
                 <span class="status-badge ${app.state}">${app.state}</span>
             </div>
-            
+
             ${
               app.description
                 ? `<div class="app-description">${app.description}</div>`
                 : ""
             }
-            
+
             <div class="app-meta">
                 <div class="meta-item">
                     <span>📦</span>
@@ -363,7 +363,7 @@ function renderApps() {
                     : ""
                 }
             </div>
-            
+
             <div class="app-actions" onclick="event.stopPropagation()">
                 ${getAppActions(app)}
             </div>
@@ -824,7 +824,7 @@ async function showAppDetails(appId) {
   content.innerHTML = `
         <h2>${app.display_name}</h2>
         <p class="app-name">${app.name}</p>
-        
+
         <div style="margin: 1.5rem 0;">
             <h3>Status</h3>
             <p><strong>State:</strong> <span class="status-badge ${
@@ -839,7 +839,7 @@ async function showAppDetails(appId) {
                 : ""
             }
         </div>
-        
+
         ${
           app.description
             ? `
@@ -850,7 +850,7 @@ async function showAppDetails(appId) {
         `
             : ""
         }
-        
+
         <div style="margin: 1.5rem 0;">
             <h3>Configuration</h3>
             <p><strong>Entrypoint:</strong> <code>${app.entrypoint}</code></p>
@@ -866,7 +866,7 @@ async function showAppDetails(appId) {
                 : ""
             }
         </div>
-        
+
         ${
           executions.length > 0
             ? `
@@ -879,7 +879,7 @@ async function showAppDetails(appId) {
                     <div style="background: var(--bg-tertiary); padding: 0.8rem; margin: 0.5rem 0; border-radius: 4px;">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
                             <div>
-                                <strong>ID:</strong> ${exec.id} | 
+                                <strong>ID:</strong> ${exec.id} |
                                 <strong>Status:</strong> <span class="status-badge ${exec.status}">${exec.status}</span>
                                 ${exec.exit_code !== null ? ` | <strong>Exit Code:</strong> ${exec.exit_code}` : ""}
                             </div>
@@ -913,7 +913,7 @@ async function showAppDetails(appId) {
         </div>
         `
         }
-        
+
         ${
           schedules.length > 0
             ? `
@@ -1378,12 +1378,12 @@ async function viewExecutionLogs(executionId) {
           ${execution.ended_at ? `<p><strong>Ended:</strong> ${new Date(execution.ended_at).toLocaleString()}</p>` : ""}
         </div>
       </div>
-      
+
       <div class="logs-section">
         <h4 style="color: var(--success-color); margin-bottom: 0.5rem;">📤 Standard Output (stdout)</h4>
         <pre class="log-output">${escapeHtml(stdout)}</pre>
       </div>
-      
+
       <div class="logs-section">
         <h4 style="color: var(--error-color); margin-bottom: 0.5rem;">📥 Standard Error (stderr)</h4>
         <pre class="log-output">${escapeHtml(stderr)}</pre>

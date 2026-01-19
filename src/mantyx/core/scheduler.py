@@ -6,7 +6,6 @@ Uses APScheduler to manage cron and interval-based job execution.
 
 import traceback
 from datetime import datetime
-from typing import Optional
 from zoneinfo import ZoneInfo
 
 from apscheduler.executors.pool import ThreadPoolExecutor
@@ -71,8 +70,7 @@ def execute_scheduled_app(app_id: int, schedule_id: int | None) -> None:
 
             # For scheduled runs, validate schedule exists
             if schedule_id is not None:
-                schedule = session.query(Schedule).filter(
-                    Schedule.id == schedule_id).first()
+                schedule = session.query(Schedule).filter(Schedule.id == schedule_id).first()
                 if not schedule:
                     raise RuntimeError(f"Schedule {schedule_id} not found")
                 timeout_seconds = schedule.timeout_seconds if schedule.timeout_seconds else None
@@ -82,8 +80,7 @@ def execute_scheduled_app(app_id: int, schedule_id: int | None) -> None:
                 schedule = None
 
             # Check app state (allow more states for manual runs)
-            if schedule_id is not None and app.state not in (AppState.ENABLED,
-                                                             AppState.STOPPED):
+            if schedule_id is not None and app.state not in (AppState.ENABLED, AppState.STOPPED):
                 raise RuntimeError(f"App {app_name} is not enabled")
 
         # Get paths
@@ -103,8 +100,7 @@ def execute_scheduled_app(app_id: int, schedule_id: int | None) -> None:
 
         # Update execution status
         with get_db() as session:
-            exec_obj = session.query(Execution).filter(
-                Execution.id == execution_id).first()
+            exec_obj = session.query(Execution).filter(Execution.id == execution_id).first()
             if exec_obj:
                 exec_obj.status = ExecutionStatus.RUNNING
                 exec_obj.started_at = datetime.now()
@@ -113,13 +109,13 @@ def execute_scheduled_app(app_id: int, schedule_id: int | None) -> None:
 
         # Prepare environment
         import os
+
         env = os.environ.copy()
         if app_environment:
             env.update(app_environment)
 
         # Execute
-        with open(stdout_path, "w") as stdout_file, open(stderr_path,
-                                                         "w") as stderr_file:
+        with open(stdout_path, "w") as stdout_file, open(stderr_path, "w") as stderr_file:
             result = subprocess.run(
                 [str(python_exe), str(entrypoint)],
                 cwd=str(app_dir),
@@ -131,18 +127,17 @@ def execute_scheduled_app(app_id: int, schedule_id: int | None) -> None:
 
         # Update execution status
         with get_db() as session:
-            exec_obj = session.query(Execution).filter(
-                Execution.id == execution_id).first()
+            exec_obj = session.query(Execution).filter(Execution.id == execution_id).first()
             if exec_obj:
-                exec_obj.status = (ExecutionStatus.SUCCESS if result.returncode
-                                   == 0 else ExecutionStatus.FAILED)
+                exec_obj.status = (
+                    ExecutionStatus.SUCCESS if result.returncode == 0 else ExecutionStatus.FAILED
+                )
                 exec_obj.ended_at = datetime.now()
                 exec_obj.exit_code = result.returncode
 
             # Update schedule last run (only if this was a scheduled execution)
             if schedule_id is not None:
-                sched_obj = session.query(Schedule).filter(
-                    Schedule.id == schedule_id).first()
+                sched_obj = session.query(Schedule).filter(Schedule.id == schedule_id).first()
                 if sched_obj:
                     sched_obj.last_run = datetime.now()
                     sched_obj.run_count += 1
@@ -162,14 +157,13 @@ def execute_scheduled_app(app_id: int, schedule_id: int | None) -> None:
 
     except subprocess.TimeoutExpired:
         logger.error(
-            f"Scheduled app execution timed out",
+            "Scheduled app execution timed out",
             app_id=app_id,
             execution_id=execution_id,
         )
 
         with get_db() as session:
-            exec_obj = session.query(Execution).filter(
-                Execution.id == execution_id).first()
+            exec_obj = session.query(Execution).filter(Execution.id == execution_id).first()
             if exec_obj:
                 exec_obj.status = ExecutionStatus.TIMEOUT
                 exec_obj.ended_at = datetime.now()
@@ -184,8 +178,7 @@ def execute_scheduled_app(app_id: int, schedule_id: int | None) -> None:
         )
 
         with get_db() as session:
-            exec_obj = session.query(Execution).filter(
-                Execution.id == execution_id).first()
+            exec_obj = session.query(Execution).filter(Execution.id == execution_id).first()
             if exec_obj:
                 exec_obj.status = ExecutionStatus.FAILED
                 exec_obj.ended_at = datetime.now()
@@ -198,7 +191,7 @@ class AppScheduler:
     def __init__(self):
         self.settings = get_settings()
         self.venv_manager = VenvManager()
-        self._scheduler: Optional[BackgroundScheduler] = None
+        self._scheduler: BackgroundScheduler | None = None
 
     def start(self) -> None:
         """Start the scheduler."""
@@ -210,20 +203,18 @@ class AppScheduler:
 
         # Get system timezone
         from mantyx.config import get_system_timezone
+
         system_tz = get_system_timezone()
         logger.info(f"📍 Scheduler timezone: {system_tz}")
 
-        jobstores = {
-            'default':
-            SQLAlchemyJobStore(url=self.settings.effective_database_url)
-        }
+        jobstores = {"default": SQLAlchemyJobStore(url=self.settings.effective_database_url)}
 
-        executors = {'default': ThreadPoolExecutor(max_workers=10)}
+        executors = {"default": ThreadPoolExecutor(max_workers=10)}
 
         job_defaults = {
-            'coalesce': True,
-            'max_instances': 1,
-            'misfire_grace_time': 60,
+            "coalesce": True,
+            "max_instances": 1,
+            "misfire_grace_time": 60,
         }
 
         self._scheduler = BackgroundScheduler(
@@ -250,8 +241,7 @@ class AppScheduler:
     def _load_schedules(self) -> None:
         """Load all enabled schedules from database."""
         with get_db() as session:
-            schedules = session.query(Schedule).filter(
-                Schedule.is_enabled == True).all()
+            schedules = session.query(Schedule).filter(Schedule.is_enabled == True).all()
 
             for schedule in schedules:
                 try:
@@ -284,8 +274,7 @@ class AppScheduler:
             # Passing timezone causes APScheduler to interpret the hour as UTC instead of local time
             parts = schedule.cron_expression.split()
             if len(parts) != 5:
-                raise ValueError(
-                    f"Invalid cron expression: {schedule.cron_expression}")
+                raise ValueError(f"Invalid cron expression: {schedule.cron_expression}")
 
             minute, hour, day, month, day_of_week = parts
 
@@ -319,8 +308,7 @@ class AppScheduler:
                 # Don't set timezone here - inherit from scheduler
             )
         else:
-            raise ValueError(
-                f"Unknown schedule type: {schedule.schedule_type}")
+            raise ValueError(f"Unknown schedule type: {schedule.schedule_type}")
 
         # Add job (replace if exists)
         self._scheduler.add_job(
@@ -381,6 +369,7 @@ class AppScheduler:
             return {"running": False, "error": "Scheduler not initialized"}
 
         from mantyx.config import get_system_timezone
+
         system_tz = get_system_timezone()
         tz = ZoneInfo(system_tz)
         current_time = datetime.now(tz)
@@ -398,29 +387,20 @@ class AppScheduler:
                 next_run_local = next_run.astimezone(tz)
 
             job_info = {
-                "id":
-                job.id,
-                "name":
-                job.name,
-                "next_run_time":
-                next_run.isoformat() if next_run else None,
-                "next_run_time_local":
-                next_run_local.isoformat() if next_run_local else None,
-                "trigger":
-                str(job.trigger),
+                "id": job.id,
+                "name": job.name,
+                "next_run_time": next_run.isoformat() if next_run else None,
+                "next_run_time_local": next_run_local.isoformat() if next_run_local else None,
+                "trigger": str(job.trigger),
             }
             jobs_info.append(job_info)
 
         return {
-            "running":
-            self._scheduler.running,
-            "num_jobs":
-            len(jobs_info),
-            "jobs":
-            jobs_info,
-            "scheduler_timezone":
-            str(self._scheduler.timezone)
-            if hasattr(self._scheduler, 'timezone') else "unknown",
-            "current_time":
-            current_time.isoformat(),
+            "running": self._scheduler.running,
+            "num_jobs": len(jobs_info),
+            "jobs": jobs_info,
+            "scheduler_timezone": (
+                str(self._scheduler.timezone) if hasattr(self._scheduler, "timezone") else "unknown"
+            ),
+            "current_time": current_time.isoformat(),
         }

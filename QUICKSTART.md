@@ -16,6 +16,7 @@ code .
 ```
 
 Then:
+
 1. Press `Ctrl+Shift+P`
 2. Type "Run Task"
 3. Select **"Mantyx: Setup Development Environment"**
@@ -57,6 +58,7 @@ python -m mantyx.cli run
 ```
 
 You should see output like:
+
 ```
 INFO:     Started server process
 INFO:     Waiting for application startup.
@@ -66,7 +68,7 @@ INFO:     Uvicorn running on http://0.0.0.0:8420
 
 ## Step 3: Access the Web Interface
 
-Open your browser to: **http://localhost:8420**
+Open your browser to: **<http://localhost:8420>**
 
 You should see the Mantyx dashboard with 0 apps.
 
@@ -75,6 +77,7 @@ You should see the Mantyx dashboard with 0 apps.
 ### Option A: Upload the Example App
 
 1. Create a ZIP of the hello-world example:
+
    ```bash
    cd examples/hello-world
    zip -r hello-world.zip .
@@ -112,6 +115,7 @@ You should see the Mantyx dashboard with 0 apps.
 ## Step 6: View App Details
 
 Click on any app card to see:
+
 - Current status and PID
 - Recent execution history
 - Configuration details
@@ -162,7 +166,7 @@ if __name__ == "__main__":
 
 ## Next Steps
 
-1. **Explore the API**: Visit http://localhost:8420/docs for interactive API documentation
+1. **Explore the API**: Visit <http://localhost:8420/docs> for interactive API documentation
 2. **Create schedules**: Use the API to add cron or interval schedules for your apps
 3. **Monitor logs**: Check the logs directory for app output
 4. **Try updates**: Upload new versions of your apps with automatic backups
@@ -190,19 +194,24 @@ curl http://localhost:8420/api/apps/1/status
 ## Troubleshooting
 
 ### Port already in use
+
 Change the port:
+
 ```bash
 export MANTYX_PORT=8421
 mantyx run
 ```
 
 ### Permission denied
+
 Make sure you have write access to the base directory:
+
 ```bash
 chmod 755 ./dev_data
 ```
 
 ### App won't start
+
 1. Check the app is in "enabled" state
 2. Verify dependencies are installed (click "Install")
 3. Check logs in `dev_data/logs/<app-name>/`
@@ -212,7 +221,7 @@ chmod 755 ./dev_data
 - **Documentation**: See the main README.md
 - **Examples**: Check the `examples/` directory
 - **API Docs**: Visit `/docs` endpoint when running
-- **Issues**: https://github.com/Thulrus/Mantyx/issues
+- **Issues**: <https://github.com/Thulrus/Mantyx/issues>
 
 ---
 

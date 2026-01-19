@@ -2,12 +2,11 @@
 Database session management and initialization.
 """
 
-from contextlib import asynccontextmanager, contextmanager
-from typing import AsyncGenerator, Generator
+from collections.abc import Generator
+from contextlib import contextmanager
 
 from sqlalchemy import create_engine, event
 from sqlalchemy.engine import Engine
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from mantyx.config import get_settings
@@ -80,8 +79,8 @@ def get_db() -> Generator[Session, None, None]:
 
 
 def get_db_session():
-    """Get a database session (for dependency injection). 
-    
+    """Get a database session (for dependency injection).
+
     This is a generator that yields a session and ensures it's closed after use.
     """
     SessionLocal = get_session_factory()

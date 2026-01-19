@@ -3,14 +3,11 @@ FastAPI routes for app management.
 """
 
 import shutil
-from pathlib import Path
-from typing import Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
 from mantyx.api.schemas import (
-    AppCreate,
     AppResponse,
     AppStatusResponse,
     AppUpdate,
@@ -32,21 +29,21 @@ def get_app_manager() -> AppManager:
 
 @router.get("", response_model=list[AppResponse])
 def list_apps(
-        include_deleted: bool = False,
-        db: Session = Depends(get_db_session),
+    include_deleted: bool = False,
+    db: Session = Depends(get_db_session),
 ):
     """List all apps."""
     query = db.query(App)
     if not include_deleted:
-        query = query.filter(App.is_deleted == False)
+        query = query.filter(App.is_deleted.is_not(True))
     apps = query.all()
     return apps
 
 
 @router.get("/{app_id}", response_model=AppResponse)
 def get_app(
-        app_id: int,
-        db: Session = Depends(get_db_session),
+    app_id: int,
+    db: Session = Depends(get_db_session),
 ):
     """Get a specific app."""
     app = db.query(App).filter(App.id == app_id).first()
@@ -57,12 +54,12 @@ def get_app(
 
 @router.post("/upload/zip", response_model=UploadResponse)
 async def upload_zip(
-        file: UploadFile = File(...),
-        app_name: str = Form(...),
-        display_name: str = Form(...),
-        app_type: str = Form("PERPETUAL"),
-        description: Optional[str] = Form(None),
-        app_manager: AppManager = Depends(get_app_manager),
+    file: UploadFile = File(...),
+    app_name: str = Form(...),
+    display_name: str = Form(...),
+    app_type: str = Form("PERPETUAL"),
+    description: str | None = Form(None),
+    app_manager: AppManager = Depends(get_app_manager),
 ):
     """Upload and create an app from a ZIP file."""
     settings = get_settings()
@@ -79,8 +76,7 @@ async def upload_zip(
         try:
             app_type_enum = AppType[app_type.upper()]
         except KeyError:
-            raise HTTPException(status_code=400,
-                                detail=f"Invalid app_type: {app_type}")
+            raise HTTPException(status_code=400, detail=f"Invalid app_type: {app_type}")
 
         # Create app
         app = app_manager.create_app_from_zip(
@@ -108,8 +104,7 @@ async def upload_zip(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500,
-                            detail=f"Failed to upload app: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to upload app: {str(e)}")
     finally:
         if temp_path.exists():
             temp_path.unlink()
@@ -117,13 +112,13 @@ async def upload_zip(
 
 @router.post("/upload/git", response_model=UploadResponse)
 async def upload_git(
-        git_url: str = Form(...),
-        app_name: str = Form(...),
-        display_name: str = Form(...),
-        branch: str = Form("main"),
-        app_type: str = Form("PERPETUAL"),
-        description: Optional[str] = Form(None),
-        app_manager: AppManager = Depends(get_app_manager),
+    git_url: str = Form(...),
+    app_name: str = Form(...),
+    display_name: str = Form(...),
+    branch: str = Form("main"),
+    app_type: str = Form("PERPETUAL"),
+    description: str | None = Form(None),
+    app_manager: AppManager = Depends(get_app_manager),
 ):
     """Create an app from a Git repository."""
     try:
@@ -131,8 +126,7 @@ async def upload_git(
         try:
             app_type_enum = AppType[app_type.upper()]
         except KeyError:
-            raise HTTPException(status_code=400,
-                                detail=f"Invalid app_type: {app_type}")
+            raise HTTPException(status_code=400, detail=f"Invalid app_type: {app_type}")
 
         app = app_manager.create_app_from_git(
             git_url,
@@ -160,8 +154,7 @@ async def upload_git(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500,
-                            detail=f"Failed to create app from Git: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to create app from Git: {str(e)}")
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -170,8 +163,8 @@ async def upload_git(
 
 @router.post("/{app_id}/install")
 def install_app(
-        app_id: int,
-        app_manager: AppManager = Depends(get_app_manager),
+    app_id: int,
+    app_manager: AppManager = Depends(get_app_manager),
 ):
     """Install an app's dependencies."""
     try:
@@ -185,8 +178,8 @@ def install_app(
 
 @router.post("/{app_id}/enable")
 def enable_app(
-        app_id: int,
-        app_manager: AppManager = Depends(get_app_manager),
+    app_id: int,
+    app_manager: AppManager = Depends(get_app_manager),
 ):
     """Enable an app."""
     try:
@@ -200,8 +193,8 @@ def enable_app(
 
 @router.post("/{app_id}/disable")
 def disable_app(
-        app_id: int,
-        app_manager: AppManager = Depends(get_app_manager),
+    app_id: int,
+    app_manager: AppManager = Depends(get_app_manager),
 ):
     """Disable an app."""
     try:
@@ -215,9 +208,9 @@ def disable_app(
 
 @router.post("/{app_id}/start")
 def start_app(
-        app_id: int,
-        app_manager: AppManager = Depends(get_app_manager),
-        db: Session = Depends(get_db_session),
+    app_id: int,
+    app_manager: AppManager = Depends(get_app_manager),
+    db: Session = Depends(get_db_session),
 ):
     """Start a perpetual app."""
     app = db.query(App).filter(App.id == app_id).first()
@@ -225,8 +218,7 @@ def start_app(
         raise HTTPException(status_code=404, detail="App not found")
 
     if app.app_type != AppType.PERPETUAL:
-        raise HTTPException(status_code=400,
-                            detail="Only perpetual apps can be started")
+        raise HTTPException(status_code=400, detail="Only perpetual apps can be started")
 
     try:
         app_manager.supervisor.start_app(app)
@@ -237,9 +229,9 @@ def start_app(
 
 @router.post("/{app_id}/stop")
 def stop_app(
-        app_id: int,
-        app_manager: AppManager = Depends(get_app_manager),
-        db: Session = Depends(get_db_session),
+    app_id: int,
+    app_manager: AppManager = Depends(get_app_manager),
+    db: Session = Depends(get_db_session),
 ):
     """Stop a running app."""
     app = db.query(App).filter(App.id == app_id).first()
@@ -255,9 +247,9 @@ def stop_app(
 
 @router.post("/{app_id}/restart")
 def restart_app(
-        app_id: int,
-        app_manager: AppManager = Depends(get_app_manager),
-        db: Session = Depends(get_db_session),
+    app_id: int,
+    app_manager: AppManager = Depends(get_app_manager),
+    db: Session = Depends(get_db_session),
 ):
     """Restart an app."""
     app = db.query(App).filter(App.id == app_id).first()
@@ -273,10 +265,10 @@ def restart_app(
 
 @router.post("/{app_id}/update/zip", response_model=UpdateResponse)
 async def update_app_zip(
-        app_id: int,
-        file: UploadFile = File(...),
-        backup: bool = Form(True),
-        app_manager: AppManager = Depends(get_app_manager),
+    app_id: int,
+    file: UploadFile = File(...),
+    backup: bool = Form(True),
+    app_manager: AppManager = Depends(get_app_manager),
 ):
     """Update an app from a ZIP file."""
     settings = get_settings()
@@ -303,14 +295,12 @@ async def update_app_zip(
             old_version=result["old_version"],
             new_version=result["new_version"],
             backup_created=result["backup_created"],
-            message=
-            f"App updated successfully from {result['old_version']} to {result['new_version']}",
+            message=f"App updated successfully from {result['old_version']} to {result['new_version']}",
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500,
-                            detail=f"Failed to update app: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to update app: {str(e)}")
     finally:
         if temp_path.exists():
             temp_path.unlink()
@@ -318,9 +308,9 @@ async def update_app_zip(
 
 @router.post("/{app_id}/update/git", response_model=UpdateResponse)
 def update_app_git(
-        app_id: int,
-        backup: bool = Form(True),
-        app_manager: AppManager = Depends(get_app_manager),
+    app_id: int,
+    backup: bool = Form(True),
+    app_manager: AppManager = Depends(get_app_manager),
 ):
     """Pull latest changes from Git repository for an app."""
     try:
@@ -329,7 +319,9 @@ def update_app_git(
         if not result["changed"]:
             message = "No changes detected, app is already up to date"
         else:
-            message = f"App updated successfully from {result['old_version']} to {result['new_version']}"
+            message = (
+                f"App updated successfully from {result['old_version']} to {result['new_version']}"
+            )
 
         return UpdateResponse(
             app_id=result["app_id"],
@@ -345,14 +337,13 @@ def update_app_git(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500,
-                            detail=f"Failed to pull Git updates: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to pull Git updates: {str(e)}")
 
 
 @router.post("/{app_id}/run")
 def run_scheduled_app(
-        app_id: int,
-        db: Session = Depends(get_db_session),
+    app_id: int,
+    db: Session = Depends(get_db_session),
 ):
     """Run a scheduled app immediately."""
     import threading
@@ -364,17 +355,13 @@ def run_scheduled_app(
         raise HTTPException(status_code=404, detail="App not found")
 
     if app.app_type != AppType.SCHEDULED:
-        raise HTTPException(status_code=400,
-                            detail="App is not a scheduled app")
+        raise HTTPException(status_code=400, detail="App is not a scheduled app")
 
-    if app.state not in (AppState.ENABLED, AppState.STOPPED,
-                         AppState.INSTALLED, AppState.DISABLED):
-        raise HTTPException(status_code=400,
-                            detail=f"Cannot run app in state: {app.state}")
+    if app.state not in (AppState.ENABLED, AppState.STOPPED, AppState.INSTALLED, AppState.DISABLED):
+        raise HTTPException(status_code=400, detail=f"Cannot run app in state: {app.state}")
 
     # Run in background thread to not block API response
-    thread = threading.Thread(target=execute_scheduled_app,
-                              args=(app_id, None))
+    thread = threading.Thread(target=execute_scheduled_app, args=(app_id, None))
     thread.start()
 
     return {"message": "App execution started"}
@@ -382,9 +369,9 @@ def run_scheduled_app(
 
 @router.delete("/{app_id}")
 def delete_app(
-        app_id: int,
-        soft: bool = True,
-        app_manager: AppManager = Depends(get_app_manager),
+    app_id: int,
+    soft: bool = True,
+    app_manager: AppManager = Depends(get_app_manager),
 ):
     """Delete an app."""
     try:
@@ -398,9 +385,9 @@ def delete_app(
 
 @router.patch("/{app_id}", response_model=AppResponse)
 def update_app_config(
-        app_id: int,
-        app_update: AppUpdate,
-        db: Session = Depends(get_db_session),
+    app_id: int,
+    app_update: AppUpdate,
+    db: Session = Depends(get_db_session),
 ):
     """Update an app's configuration."""
     app = db.query(App).filter(App.id == app_id).first()
@@ -418,8 +405,8 @@ def update_app_config(
 
 @router.get("/{app_id}/status", response_model=AppStatusResponse)
 def get_app_status(
-        app_id: int,
-        db: Session = Depends(get_db_session),
+    app_id: int,
+    db: Session = Depends(get_db_session),
 ):
     """Get detailed status of an app."""
     app = db.query(App).filter(App.id == app_id).first()

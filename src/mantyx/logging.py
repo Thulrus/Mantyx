@@ -8,7 +8,6 @@ import logging
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 from mantyx.config import get_settings
 from mantyx.models.log import LogEntry, LogLevel
@@ -16,33 +15,31 @@ from mantyx.models.log import LogEntry, LogLevel
 
 class MantycLogger:
     """Enhanced logger that writes to both files and database."""
-    
+
     def __init__(self, name: str):
         self.name = name
         self.logger = logging.getLogger(name)
-        
+
         # Configure Python logger
         if not self.logger.handlers:
             handler = logging.StreamHandler(sys.stdout)
-            formatter = logging.Formatter(
-                '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-            )
+            formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
             handler.setFormatter(formatter)
             self.logger.addHandler(handler)
             self.logger.setLevel(logging.INFO)
-    
+
     def _log_to_db(
         self,
         level: LogLevel,
         message: str,
-        details: Optional[str] = None,
-        app_id: Optional[int] = None,
-        execution_id: Optional[int] = None,
+        details: str | None = None,
+        app_id: int | None = None,
+        execution_id: int | None = None,
     ) -> None:
         """Write log entry to database."""
         try:
             from mantyx.database import get_db
-            
+
             with get_db() as session:
                 entry = LogEntry(
                     app_id=app_id,
@@ -56,57 +53,57 @@ class MantycLogger:
         except Exception as e:
             # Don't let logging failures crash the app
             self.logger.error(f"Failed to write log to database: {e}")
-    
+
     def debug(
         self,
         message: str,
-        details: Optional[str] = None,
-        app_id: Optional[int] = None,
-        execution_id: Optional[int] = None,
+        details: str | None = None,
+        app_id: int | None = None,
+        execution_id: int | None = None,
     ) -> None:
         """Log debug message."""
         self.logger.debug(message)
         self._log_to_db(LogLevel.DEBUG, message, details, app_id, execution_id)
-    
+
     def info(
         self,
         message: str,
-        details: Optional[str] = None,
-        app_id: Optional[int] = None,
-        execution_id: Optional[int] = None,
+        details: str | None = None,
+        app_id: int | None = None,
+        execution_id: int | None = None,
     ) -> None:
         """Log info message."""
         self.logger.info(message)
         self._log_to_db(LogLevel.INFO, message, details, app_id, execution_id)
-    
+
     def warning(
         self,
         message: str,
-        details: Optional[str] = None,
-        app_id: Optional[int] = None,
-        execution_id: Optional[int] = None,
+        details: str | None = None,
+        app_id: int | None = None,
+        execution_id: int | None = None,
     ) -> None:
         """Log warning message."""
         self.logger.warning(message)
         self._log_to_db(LogLevel.WARNING, message, details, app_id, execution_id)
-    
+
     def error(
         self,
         message: str,
-        details: Optional[str] = None,
-        app_id: Optional[int] = None,
-        execution_id: Optional[int] = None,
+        details: str | None = None,
+        app_id: int | None = None,
+        execution_id: int | None = None,
     ) -> None:
         """Log error message."""
         self.logger.error(message)
         self._log_to_db(LogLevel.ERROR, message, details, app_id, execution_id)
-    
+
     def critical(
         self,
         message: str,
-        details: Optional[str] = None,
-        app_id: Optional[int] = None,
-        execution_id: Optional[int] = None,
+        details: str | None = None,
+        app_id: int | None = None,
+        execution_id: int | None = None,
     ) -> None:
         """Log critical message."""
         self.logger.critical(message)
@@ -118,12 +115,12 @@ def get_logger(name: str) -> MantycLogger:
     return MantycLogger(name)
 
 
-def get_app_log_path(app_name: str, execution_id: Optional[int] = None) -> tuple[Path, Path]:
+def get_app_log_path(app_name: str, execution_id: int | None = None) -> tuple[Path, Path]:
     """Get paths for app stdout and stderr logs."""
     settings = get_settings()
     log_dir = settings.logs_dir / app_name
     log_dir.mkdir(parents=True, exist_ok=True)
-    
+
     if execution_id:
         stdout_path = log_dir / f"execution_{execution_id}_stdout.log"
         stderr_path = log_dir / f"execution_{execution_id}_stderr.log"
@@ -132,5 +129,5 @@ def get_app_log_path(app_name: str, execution_id: Optional[int] = None) -> tuple
         date_str = datetime.now().strftime("%Y%m%d_%H%M%S")
         stdout_path = log_dir / f"{date_str}_stdout.log"
         stderr_path = log_dir / f"{date_str}_stderr.log"
-    
+
     return stdout_path, stderr_path

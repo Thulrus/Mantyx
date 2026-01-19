@@ -152,6 +152,7 @@ Updates must follow a **safe, transactional process**:
    ```
    /srv/orchestrator/backups/<app_name>/<timestamp>/
    ```
+
 3. New version is staged in a temporary directory
 4. Validation is re-run
 5. Dependencies are reinstalled if needed

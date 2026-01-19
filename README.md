@@ -40,12 +40,14 @@ It isn't complete yet, but it's slowly getting better.
 #### Option 1: Using VS Code Tasks (Recommended for Development)
 
 1. **Clone the repository:**
+
    ```bash
    git clone https://github.com/Thulrus/Mantyx.git
    cd Mantyx
    ```
 
 2. **Open in VS Code:**
+
    ```bash
    code .
    ```
@@ -54,7 +56,7 @@ It isn't complete yet, but it's slowly getting better.
    - Press `Ctrl+Shift+P`
    - Type "Run Task"
    - Select "Mantyx: Setup Development Environment"
-   
+
    This will automatically:
    - Create a `.venv` virtual environment
    - Install all dependencies
@@ -69,12 +71,14 @@ It isn't complete yet, but it's slowly getting better.
 #### Option 2: Manual Installation
 
 1. **Clone the repository:**
+
    ```bash
    git clone https://github.com/Thulrus/Mantyx.git
    cd Mantyx
    ```
 
 2. **Create a virtual environment and install:**
+
    ```bash
    python3 -m venv .venv
    source .venv/bin/activate
@@ -82,6 +86,7 @@ It isn't complete yet, but it's slowly getting better.
    ```
 
 3. **Run Mantyx:**
+
    ```bash
    mantyx run
    # or
@@ -98,23 +103,27 @@ It isn't complete yet, but it's slowly getting better.
 For production use, install Mantyx as a system service:
 
 1. **Create mantyx user:**
+
    ```bash
    sudo useradd -r -s /bin/false mantyx
    ```
 
 2. **Create base directory:**
+
    ```bash
    sudo mkdir -p /srv/mantyx
    sudo chown mantyx:mantyx /srv/mantyx
    ```
 
 3. **Install Mantyx:**
+
    ```bash
    sudo -u mantyx python3 -m venv /srv/mantyx/venv
    sudo -u mantyx /srv/mantyx/venv/bin/pip install /path/to/Mantyx
    ```
 
 4. **Install systemd service:**
+
    ```bash
    sudo cp mantyx.service /etc/systemd/system/
    sudo systemctl daemon-reload
@@ -123,6 +132,7 @@ For production use, install Mantyx as a system service:
    ```
 
 5. **Check status:**
+
    ```bash
    sudo systemctl status mantyx
    ```
@@ -181,12 +191,14 @@ cp .env.example .env
 ### Uploading an Application
 
 **Via Web Interface:**
+
 1. Click "Upload App"
 2. Choose between ZIP upload or Git repository
 3. Fill in app details
 4. Upload and install
 
 **Via API:**
+
 ```bash
 # Upload ZIP
 curl -X POST http://localhost:8420/api/apps/upload/zip \
@@ -230,25 +242,31 @@ curl -X POST http://localhost:8420/api/schedules \
 ## Application Types
 
 ### Perpetual Apps
+
 Long-running services that should stay running:
+
 - Web servers
 - Background workers
 - Monitoring agents
 
 Features:
+
 - Automatic restart on failure
 - Health checks
 - PID tracking
 - Configurable restart policies
 
 ### Scheduled Apps
+
 Jobs that run on a schedule:
+
 - Data processing
 - Backups
 - Reports
 - Maintenance tasks
 
 Features:
+
 - Cron expressions
 - Interval-based scheduling
 - Execution timeouts
@@ -259,12 +277,14 @@ Features:
 ## Application Structure
 
 ### Minimal App
+
 ```
 myapp/
 └── main.py
 ```
 
 ### Complete App
+
 ```
 myapp/
 ├── main.py           # Entrypoint
@@ -275,6 +295,7 @@ myapp/
 ```
 
 ### Example main.py
+
 ```python
 #!/usr/bin/env python3
 """
@@ -286,7 +307,7 @@ import time
 
 def main():
     print("Starting my application...")
-    
+
     # Your application logic here
     while True:
         print("Working...")
@@ -323,7 +344,29 @@ Full API documentation is available at `/docs` when Mantyx is running.
 
 ## Development
 
-### Setting up Development Environment
+### Quick Setup (Recommended)
+
+Use the automated setup script:
+
+```bash
+# Clone repository
+git clone https://github.com/Thulrus/Mantyx.git
+cd Mantyx
+
+# Run automated setup
+./scripts/setup-dev.sh
+```
+
+This script will:
+
+- Verify Python 3.10+
+- Create virtual environment
+- Install all dependencies
+- Configure pre-commit hooks
+- Create development directories
+- Run tests to verify setup
+
+### Manual Setup
 
 ```bash
 # Clone repository
@@ -331,11 +374,14 @@ git clone https://github.com/Thulrus/Mantyx.git
 cd Mantyx
 
 # Create virtual environment
-python3 -m venv venv
-source venv/bin/activate
+python3 -m venv .venv
+source .venv/bin/activate
 
 # Install in development mode with dev dependencies
 pip install -e ".[dev]"
+
+# Install pre-commit hooks
+pre-commit install
 
 # Run in debug mode
 export MANTYX_DEBUG=true
@@ -343,30 +389,66 @@ export MANTYX_BASE_DIR=./dev_data
 mantyx run
 ```
 
+### Environment Health Check
+
+Verify your development environment:
+
+```bash
+./scripts/check-env.sh
+# or
+make check-env
+```
+
 ### Running Tests
 
 ```bash
 pytest
 pytest --cov=mantyx  # With coverage
+# or
+make test
+make test-cov
 ```
+
+### Code Quality
+
+```bash
+make format      # Format code with black
+make lint        # Run ruff linter
+make pre-commit  # Run all pre-commit hooks
+```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed contribution guidelines.
 
 ---
 
 ## Troubleshooting
 
+### Development Environment Issues
+
+Run the environment check:
+
+```bash
+./scripts/check-env.sh
+```
+
+This will diagnose common setup issues.
+
 ### App Won't Start
+
 1. Check logs: `/srv/mantyx/logs/<app_name>/`
 2. Verify virtual environment exists
 3. Check dependencies are installed
 4. Review app state in database
 
 ### Scheduler Not Running Jobs
+
 1. Check schedule is enabled
 2. Verify cron expression is valid
 3. Check app is in "enabled" state
 4. Review scheduler logs
 
 ### Permission Errors
+
 1. Ensure mantyx user owns `/srv/mantyx`
 2. Check file permissions in app directories
 3. Verify systemd service runs as mantyx user
@@ -397,6 +479,7 @@ Mantyx is designed for **trusted home servers** and makes the following assumpti
 - Network access is controlled at the firewall level
 
 For enhanced security:
+
 - Run Mantyx behind a reverse proxy
 - Enable authentication at the proxy level
 - Restrict file system access using AppArmor or SELinux

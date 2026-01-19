@@ -18,7 +18,7 @@ def main():
         print("Usage:")
         print("  mantyx run    Start the Mantyx server")
         print()
-        print(f"Configuration:")
+        print("Configuration:")
         settings = get_settings()
         print(f"  Base directory: {settings.base_dir}")
         print(f"  Database: {settings.effective_database_url}")

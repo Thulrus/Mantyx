@@ -4,14 +4,12 @@ Application manager handling full app lifecycle.
 Coordinates uploads, installations, updates, and deletions.
 """
 
-import json
 import shutil
 import zipfile
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
-import yaml
 from git import Repo
 
 from mantyx.config import get_settings
@@ -21,7 +19,6 @@ from mantyx.core.venv_manager import VenvManager
 from mantyx.database import get_db
 from mantyx.logging import get_logger
 from mantyx.models.app import App, AppState, AppType
-from mantyx.models.schedule import Schedule
 
 logger = get_logger("app_manager")
 
@@ -31,9 +28,9 @@ class AppManager:
 
     def __init__(
         self,
-        venv_manager: Optional[VenvManager] = None,
-        supervisor: Optional[ProcessSupervisor] = None,
-        scheduler: Optional[AppScheduler] = None,
+        venv_manager: VenvManager | None = None,
+        supervisor: ProcessSupervisor | None = None,
+        scheduler: AppScheduler | None = None,
     ):
         self.settings = get_settings()
         self.venv_manager = venv_manager or VenvManager()
@@ -55,15 +52,17 @@ class AppManager:
 
         size_mb = file_path.stat().st_size / (1024 * 1024)
         if size_mb > self.settings.max_upload_size_mb:
-            raise ValueError(f"Upload size ({size_mb:.1f}MB) exceeds limit "
-                             f"({self.settings.max_upload_size_mb}MB)")
+            raise ValueError(
+                f"Upload size ({size_mb:.1f}MB) exceeds limit "
+                f"({self.settings.max_upload_size_mb}MB)"
+            )
 
     def create_app_from_zip(
         self,
         zip_path: Path,
         app_name: str,
         display_name: str,
-        description: Optional[str] = None,
+        description: str | None = None,
         app_type: AppType = AppType.PERPETUAL,
     ) -> dict[str, int | str]:
         """Create an app from a ZIP archive."""
@@ -88,10 +87,10 @@ class AppManager:
             # Extract ZIP
             source_dir.mkdir(parents=True, exist_ok=True)
 
-            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+            with zipfile.ZipFile(zip_path, "r") as zip_ref:
                 # Security: check for path traversal
                 for member in zip_ref.namelist():
-                    if member.startswith('/') or '..' in member:
+                    if member.startswith("/") or ".." in member:
                         raise ValueError(f"Invalid path in ZIP: {member}")
 
                 zip_ref.extractall(source_dir)
@@ -120,8 +119,7 @@ class AppManager:
                 app_id = app.id
                 app_name = app.name
 
-            logger.info(f"Created app {app_name} with ID {app_id}",
-                        app_id=app_id)
+            logger.info(f"Created app {app_name} with ID {app_id}", app_id=app_id)
 
             # Return the values as a simple dict to avoid session issues
             return {"id": app_id, "name": app_name}
@@ -139,7 +137,7 @@ class AppManager:
         app_name: str,
         display_name: str,
         branch: str = "main",
-        description: Optional[str] = None,
+        description: str | None = None,
         app_type: AppType = AppType.PERPETUAL,
     ) -> dict[str, int | str]:
         """Create an app from a Git repository."""
@@ -238,20 +236,16 @@ class AppManager:
             requirements_file = source_dir / "requirements.txt"
 
             if requirements_file.exists():
-                logger.info(f"Installing requirements for {app.name}",
-                            app_id=app.id)
-                self.venv_manager.install_requirements(app.name,
-                                                       requirements_file)
+                logger.info(f"Installing requirements for {app.name}", app_id=app.id)
+                self.venv_manager.install_requirements(app.name, requirements_file)
             else:
-                logger.info(f"No requirements.txt found for {app.name}",
-                            app_id=app.id)
+                logger.info(f"No requirements.txt found for {app.name}", app_id=app.id)
 
             # Update state
             app.state = AppState.INSTALLED
             session.add(app)
 
-            logger.info(f"App {app.name} installed successfully",
-                        app_id=app.id)
+            logger.info(f"App {app.name} installed successfully", app_id=app.id)
 
     def enable_app(self, app_id: int) -> None:
         """Enable an app."""
@@ -261,8 +255,7 @@ class AppManager:
                 raise ValueError(f"App {app_id} not found")
 
             if not app.can_enable:
-                raise ValueError(
-                    f"App {app.name} cannot be enabled from state {app.state}")
+                raise ValueError(f"App {app.name} cannot be enabled from state {app.state}")
 
             logger.info(f"Enabling app {app.name}", app_id=app.id)
 
@@ -283,9 +276,7 @@ class AppManager:
                 raise ValueError(f"App {app_id} not found")
 
             if not app.can_disable:
-                raise ValueError(
-                    f"App {app.name} cannot be disabled from state {app.state}"
-                )
+                raise ValueError(f"App {app.name} cannot be disabled from state {app.state}")
 
             logger.info(f"Disabling app {app.name}", app_id=app.id)
 
@@ -298,10 +289,7 @@ class AppManager:
 
             logger.info(f"App {app.name} disabled", app_id=app.id)
 
-    def update_app(self,
-                   app_id: int,
-                   new_source: Path,
-                   backup: bool = True) -> None:
+    def update_app(self, app_id: int, new_source: Path, backup: bool = True) -> None:
         """Update an app's source code."""
         with get_db() as session:
             app = session.query(App).filter(App.id == app_id).first()
@@ -328,7 +316,7 @@ class AppManager:
                 # Extract new source to temp
                 temp_dir.mkdir(parents=True, exist_ok=True)
 
-                with zipfile.ZipFile(new_source, 'r') as zip_ref:
+                with zipfile.ZipFile(new_source, "r") as zip_ref:
                     zip_ref.extractall(temp_dir)
 
                 # Remove old source and move new
@@ -338,25 +326,22 @@ class AppManager:
                 # Reinstall dependencies
                 requirements_file = source_dir / "requirements.txt"
                 if requirements_file.exists():
-                    self.venv_manager.install_requirements(
-                        app.name, requirements_file)
+                    self.venv_manager.install_requirements(app.name, requirements_file)
 
                 # Increment version
-                version_parts = app.version.split('.')
+                version_parts = app.version.split(".")
                 version_parts[-1] = str(int(version_parts[-1]) + 1)
-                app.version = '.'.join(version_parts)
+                app.version = ".".join(version_parts)
                 session.add(app)
 
                 # Restart if was running
                 if was_running:
                     self.supervisor.start_app(app)
 
-                logger.info(f"App {app.name} updated successfully",
-                            app_id=app.id)
+                logger.info(f"App {app.name} updated successfully", app_id=app.id)
 
             except Exception as e:
-                logger.error(f"Failed to update app {app.name}: {e}",
-                             app_id=app.id)
+                logger.error(f"Failed to update app {app.name}: {e}", app_id=app.id)
                 # TODO: Implement rollback from backup
                 raise
             finally:
@@ -405,10 +390,10 @@ class AppManager:
             # Extract new source to temp directory
             temp_dir.mkdir(parents=True, exist_ok=True)
 
-            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+            with zipfile.ZipFile(zip_path, "r") as zip_ref:
                 # Security: check for path traversal
                 for member in zip_ref.namelist():
-                    if member.startswith('/') or '..' in member:
+                    if member.startswith("/") or ".." in member:
                         raise ValueError(f"Invalid path in ZIP: {member}")
                 zip_ref.extractall(temp_dir)
 
@@ -424,8 +409,7 @@ class AppManager:
             requirements_file = source_dir / "requirements.txt"
             if requirements_file.exists():
                 logger.info(f"Reinstalling dependencies for {app_name}")
-                self.venv_manager.install_requirements(app_name,
-                                                       requirements_file)
+                self.venv_manager.install_requirements(app_name, requirements_file)
             else:
                 logger.info(f"No requirements.txt found for {app_name}")
 
@@ -434,12 +418,12 @@ class AppManager:
                 app = session.query(App).filter(App.id == app_id).first()
 
                 # Increment version
-                version_parts = app.version.split('.')
+                version_parts = app.version.split(".")
                 if len(version_parts) == 3:
                     version_parts[-1] = str(int(version_parts[-1]) + 1)
                 else:
-                    version_parts = [old_version, '1']
-                app.version = '.'.join(version_parts)
+                    version_parts = [old_version, "1"]
+                app.version = ".".join(version_parts)
 
                 app.entrypoint = new_entrypoint
                 app.last_updated_at = datetime.now()
@@ -459,7 +443,8 @@ class AppManager:
 
             logger.info(
                 f"App {app_name} updated successfully from {old_version} to {new_version}",
-                app_id=app_id)
+                app_id=app_id,
+            )
 
             return {
                 "app_id": app_id,
@@ -470,8 +455,7 @@ class AppManager:
             }
 
         except Exception as e:
-            logger.error(f"Failed to update app {app_name}: {e}",
-                         app_id=app_id)
+            logger.error(f"Failed to update app {app_name}: {e}", app_id=app_id)
             # TODO: Implement rollback from backup
             raise
         finally:
@@ -524,15 +508,12 @@ class AppManager:
 
             # Check if anything actually changed
             if new_commit == old_commit:
-                logger.info(
-                    f"No changes detected for {app_name} (commit: {new_commit})"
-                )
+                logger.info(f"No changes detected for {app_name} (commit: {new_commit})")
 
                 # Restart if it was running
                 if was_running:
                     with get_db() as session:
-                        app = session.query(App).filter(
-                            App.id == app_id).first()
+                        app = session.query(App).filter(App.id == app_id).first()
                         if app:
                             self.supervisor.start_app(app)
 
@@ -551,8 +532,7 @@ class AppManager:
             requirements_file = source_dir / "requirements.txt"
             if requirements_file.exists():
                 logger.info(f"Reinstalling dependencies for {app_name}")
-                self.venv_manager.install_requirements(app_name,
-                                                       requirements_file)
+                self.venv_manager.install_requirements(app_name, requirements_file)
 
             # Detect entrypoint in case it changed
             new_entrypoint = self._detect_entrypoint(source_dir)
@@ -564,12 +544,12 @@ class AppManager:
                     raise ValueError(f"App {app_id} not found")
 
                 # Increment version
-                version_parts = app.version.split('.')
+                version_parts = app.version.split(".")
                 if len(version_parts) == 3:
                     version_parts[-1] = str(int(version_parts[-1]) + 1)
                 else:
-                    version_parts = [old_version, '1']
-                app.version = '.'.join(version_parts)
+                    version_parts = [old_version, "1"]
+                app.version = ".".join(version_parts)
 
                 app.git_commit = new_commit
                 app.entrypoint = new_entrypoint
@@ -591,7 +571,8 @@ class AppManager:
             old_commit_short = old_commit[:8] if old_commit else "unknown"
             logger.info(
                 f"App {app_name} updated from commit {old_commit_short} to {new_commit[:8]}",
-                app_id=app_id)
+                app_id=app_id,
+            )
 
             return {
                 "app_id": app_id,
@@ -605,8 +586,7 @@ class AppManager:
             }
 
         except Exception as e:
-            logger.error(f"Failed to pull Git updates for {app_name}: {e}",
-                         app_id=app_id)
+            logger.error(f"Failed to pull Git updates for {app_name}: {e}", app_id=app_id)
             # TODO: Implement rollback from backup
             raise
 
@@ -629,8 +609,7 @@ class AppManager:
             if not app:
                 raise ValueError(f"App {app_id} not found")
 
-            logger.info(f"Deleting app {app.name} (soft={soft})",
-                        app_id=app.id)
+            logger.info(f"Deleting app {app.name} (soft={soft})", app_id=app.id)
 
             # Stop if running
             if app.state == AppState.RUNNING:

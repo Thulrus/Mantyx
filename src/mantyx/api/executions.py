@@ -21,10 +21,10 @@ def list_executions(
 ):
     """List executions, optionally filtered by app."""
     query = db.query(Execution).order_by(Execution.id.desc())
-    
+
     if app_id:
         query = query.filter(Execution.app_id == app_id)
-    
+
     executions = query.offset(offset).limit(limit).all()
     return executions
 
@@ -48,14 +48,14 @@ def get_execution_stdout(
 ):
     """Get the stdout output of an execution."""
     from pathlib import Path
-    
+
     execution = db.query(Execution).filter(Execution.id == execution_id).first()
     if not execution:
         raise HTTPException(status_code=404, detail="Execution not found")
-    
+
     if not execution.stdout_path:
         return {"output": ""}
-    
+
     try:
         stdout_path = Path(execution.stdout_path)
         if stdout_path.exists():
@@ -72,14 +72,14 @@ def get_execution_stderr(
 ):
     """Get the stderr output of an execution."""
     from pathlib import Path
-    
+
     execution = db.query(Execution).filter(Execution.id == execution_id).first()
     if not execution:
         raise HTTPException(status_code=404, detail="Execution not found")
-    
+
     if not execution.stderr_path:
         return {"output": ""}
-    
+
     try:
         stderr_path = Path(execution.stderr_path)
         if stderr_path.exists():

@@ -14,7 +14,6 @@ sys.path.insert(0, str(project_root / "src"))
 
 from sqlalchemy import text
 
-from mantyx.config import get_settings
 from mantyx.database import get_db, init_db
 
 
@@ -33,12 +32,10 @@ def migrate():
         migrations_needed = []
 
         if "last_updated_at" not in columns:
-            migrations_needed.append(
-                "ALTER TABLE apps ADD COLUMN last_updated_at DATETIME")
+            migrations_needed.append("ALTER TABLE apps ADD COLUMN last_updated_at DATETIME")
 
         if "update_count" not in columns:
-            migrations_needed.append(
-                "ALTER TABLE apps ADD COLUMN update_count INTEGER DEFAULT 0")
+            migrations_needed.append("ALTER TABLE apps ADD COLUMN update_count INTEGER DEFAULT 0")
 
         if not migrations_needed:
             print("✓ All columns already exist. No migration needed.")

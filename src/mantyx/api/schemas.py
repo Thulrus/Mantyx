@@ -3,7 +3,6 @@ Pydantic schemas for API requests and responses.
 """
 
 from datetime import datetime
-from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -20,8 +19,7 @@ def get_default_timezone() -> str:
         from mantyx.models.setting import Setting
 
         with get_db() as session:
-            setting = session.query(Setting).filter(
-                Setting.key == "timezone").first()
+            setting = session.query(Setting).filter(Setting.key == "timezone").first()
             if setting:
                 return setting.value
     except Exception:
@@ -30,23 +28,24 @@ def get_default_timezone() -> str:
 
     # Fall back to system timezone
     from mantyx.config import get_system_timezone
+
     return get_system_timezone()
 
 
 # App schemas
 class AppBase(BaseModel):
     display_name: str
-    description: Optional[str] = None
+    description: str | None = None
     app_type: AppType
     entrypoint: str
-    environment: Optional[dict[str, str]] = None
+    environment: dict[str, str] | None = None
     restart_policy: str = "on-failure"
     max_restarts: int = 3
     restart_delay: int = 5
     health_check_enabled: bool = False
-    health_check_url: Optional[str] = None
-    web_url: Optional[str] = None
-    web_port: Optional[int] = None
+    health_check_url: str | None = None
+    web_url: str | None = None
+    web_port: int | None = None
 
 
 class AppCreate(AppBase):
@@ -54,18 +53,18 @@ class AppCreate(AppBase):
 
 
 class AppUpdate(BaseModel):
-    display_name: Optional[str] = None
-    description: Optional[str] = None
-    app_type: Optional[AppType] = None
-    entrypoint: Optional[str] = None
-    environment: Optional[dict[str, str]] = None
-    restart_policy: Optional[str] = None
-    max_restarts: Optional[int] = None
-    restart_delay: Optional[int] = None
-    health_check_enabled: Optional[bool] = None
-    health_check_url: Optional[str] = None
-    web_url: Optional[str] = None
-    web_port: Optional[int] = None
+    display_name: str | None = None
+    description: str | None = None
+    app_type: AppType | None = None
+    entrypoint: str | None = None
+    environment: dict[str, str] | None = None
+    restart_policy: str | None = None
+    max_restarts: int | None = None
+    restart_delay: int | None = None
+    health_check_enabled: bool | None = None
+    health_check_url: str | None = None
+    web_url: str | None = None
+    web_port: int | None = None
 
 
 class AppResponse(AppBase):
@@ -75,16 +74,16 @@ class AppResponse(AppBase):
     name: str
     state: AppState
     version: str
-    pid: Optional[int] = None
+    pid: int | None = None
     restart_count: int = 0
-    last_restart_at: Optional[datetime] = None
-    last_health_check: Optional[datetime] = None
-    health_status: Optional[str] = None
-    last_error: Optional[str] = None
-    last_error_at: Optional[datetime] = None
-    git_url: Optional[str] = None
-    git_branch: Optional[str] = None
-    git_commit: Optional[str] = None
+    last_restart_at: datetime | None = None
+    last_health_check: datetime | None = None
+    health_status: str | None = None
+    last_error: str | None = None
+    last_error_at: datetime | None = None
+    git_url: str | None = None
+    git_branch: str | None = None
+    git_commit: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -92,12 +91,12 @@ class AppResponse(AppBase):
 # Schedule schemas
 class ScheduleBase(BaseModel):
     name: str
-    description: Optional[str] = None
+    description: str | None = None
     schedule_type: str
-    cron_expression: Optional[str] = None
-    interval_seconds: Optional[int] = None
+    cron_expression: str | None = None
+    interval_seconds: int | None = None
     timezone: str = Field(default_factory=get_default_timezone)
-    timeout_seconds: Optional[int] = None
+    timeout_seconds: int | None = None
     misfire_grace_time: int = 60
     coalesce: bool = True
 
@@ -107,13 +106,13 @@ class ScheduleCreate(ScheduleBase):
 
 
 class ScheduleUpdate(BaseModel):
-    name: Optional[str] = None
-    description: Optional[str] = None
-    cron_expression: Optional[str] = None
-    interval_seconds: Optional[int] = None
-    timezone: Optional[str] = None
-    is_enabled: Optional[bool] = None
-    timeout_seconds: Optional[int] = None
+    name: str | None = None
+    description: str | None = None
+    cron_expression: str | None = None
+    interval_seconds: int | None = None
+    timezone: str | None = None
+    is_enabled: bool | None = None
+    timeout_seconds: int | None = None
 
 
 class ScheduleResponse(ScheduleBase):
@@ -122,8 +121,8 @@ class ScheduleResponse(ScheduleBase):
     id: int
     app_id: int
     is_enabled: bool
-    last_run: Optional[datetime] = None
-    next_run: Optional[datetime] = None
+    last_run: datetime | None = None
+    next_run: datetime | None = None
     run_count: int = 0
     created_at: datetime
     updated_at: datetime
@@ -136,15 +135,15 @@ class ExecutionResponse(BaseModel):
     id: int
     app_id: int
     status: ExecutionStatus
-    started_at: Optional[datetime] = None
-    ended_at: Optional[datetime] = None
-    pid: Optional[int] = None
-    exit_code: Optional[int] = None
-    stdout_path: Optional[str] = None
-    stderr_path: Optional[str] = None
-    error_message: Optional[str] = None
+    started_at: datetime | None = None
+    ended_at: datetime | None = None
+    pid: int | None = None
+    exit_code: int | None = None
+    stdout_path: str | None = None
+    stderr_path: str | None = None
+    error_message: str | None = None
     trigger_type: str
-    trigger_details: Optional[str] = None
+    trigger_details: str | None = None
 
 
 # Log schemas
@@ -152,12 +151,12 @@ class LogEntryResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
-    app_id: Optional[int] = None
+    app_id: int | None = None
     timestamp: datetime
     level: LogLevel
     source: str
     message: str
-    details: Optional[str] = None
+    details: str | None = None
 
 
 # Upload schemas
@@ -175,8 +174,8 @@ class UpdateResponse(BaseModel):
     new_version: str
     changed: bool = True
     backup_created: bool = True
-    old_commit: Optional[str] = None
-    new_commit: Optional[str] = None
+    old_commit: str | None = None
+    new_commit: str | None = None
     message: str
 
 
@@ -190,4 +189,4 @@ class AppStatusResponse(BaseModel):
     can_stop: bool
     can_enable: bool
     can_disable: bool
-    uptime_seconds: Optional[float] = None
+    uptime_seconds: float | None = None

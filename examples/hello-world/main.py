@@ -15,18 +15,18 @@ def main():
     """Main application loop."""
     print("Hello World App starting...")
     print(f"Started at: {datetime.now()}")
-    
+
     counter = 0
-    
+
     try:
         while True:
             counter += 1
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             print(f"[{timestamp}] Hello from Mantyx! (iteration {counter})")
-            
+
             # Sleep for 10 seconds
             time.sleep(10)
-            
+
     except KeyboardInterrupt:
         print("\nReceived shutdown signal...")
         print(f"Ran for {counter} iterations")
