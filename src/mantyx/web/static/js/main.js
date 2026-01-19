@@ -1358,7 +1358,7 @@ async function viewExecutionLogs(executionId) {
     const [stdoutRes, stderrRes, execution] = await Promise.all([
       fetch(`${API_BASE}/executions/${executionId}/stdout`),
       fetch(`${API_BASE}/executions/${executionId}/stderr`),
-      apiCall(`/executions/${executionId}`)
+      apiCall(`/executions/${executionId}`),
     ]);
 
     const stdoutData = await stdoutRes.json();
@@ -1398,7 +1398,7 @@ async function viewExecutionLogs(executionId) {
 
 // Helper to escape HTML
 function escapeHtml(text) {
-  const div = document.createElement('div');
+  const div = document.createElement("div");
   div.textContent = text;
   return div.innerHTML;
 }
