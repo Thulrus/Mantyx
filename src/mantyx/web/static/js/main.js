@@ -1402,15 +1402,3 @@ function escapeHtml(text) {
   div.textContent = text;
   return div.innerHTML;
 }
-
-    content.innerHTML = html;
-  } catch (error) {
-    content.innerHTML = `
-      <div class="error-message">
-        <p>Failed to load scheduler status:</p>
-        <pre>${error.message}</pre>
-      </div>
-    `;
-    console.error("Failed to load scheduler debug info:", error);
-  }
-}
