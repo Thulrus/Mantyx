@@ -15,6 +15,7 @@ from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
 from mantyx.config import get_settings
+from mantyx.core.supervisor import ProcessSupervisor
 from mantyx.core.venv_manager import VenvManager
 from mantyx.database import get_db
 from mantyx.logging import get_app_log_path, get_logger
@@ -185,6 +186,12 @@ def execute_scheduled_app(app_id: int, schedule_id: int | None) -> None:
                 exec_obj.error_message = str(e)
 
 
+def monitor_perpetual_apps() -> None:
+    """Detect and recover crashed perpetual apps (called on a fixed interval by the scheduler)."""
+    supervisor = ProcessSupervisor()
+    supervisor.monitor_apps()
+
+
 class AppScheduler:
     """Manages scheduled execution of applications."""
 
@@ -228,6 +235,18 @@ class AppScheduler:
         self._load_schedules()
 
         self._scheduler.start()
+        self._scheduler.add_job(
+            func=monitor_perpetual_apps,
+            trigger=IntervalTrigger(seconds=self.settings.health_check_interval),
+            id="__mantyx_monitor__",
+            name="Mantyx - Monitor Perpetual Apps",
+            replace_existing=True,
+            coalesce=True,
+            max_instances=1,
+        )
+        logger.info(
+            f"🔍 Process monitor registered (interval: {self.settings.health_check_interval}s)"
+        )
         logger.info("✅ Scheduler started successfully")
         logger.info(f"📅 Loaded {len(self._scheduler.get_jobs())} jobs")
 
