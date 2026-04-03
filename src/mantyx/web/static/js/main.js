@@ -8,6 +8,9 @@ let apps = [];
 let currentAppId = null;
 let systemTimezone = "UTC";
 
+// Per-app git update check cache: { [appId]: { timestamp, updateAvailable, remoteCommit } }
+const gitUpdateCache = {};
+
 // Initialize
 document.addEventListener("DOMContentLoaded", () => {
   initializeEventListeners();
@@ -225,6 +228,37 @@ async function loadApps() {
         }
       }
     }
+
+    // Check for git updates in parallel (rate-limited to once every 5 minutes per app)
+    const GIT_CHECK_TTL_MS = 5 * 60 * 1000;
+    const now = Date.now();
+    const gitApps = apps.filter((a) => a.git_url);
+
+    await Promise.all(
+      gitApps.map(async (app) => {
+        const cached = gitUpdateCache[app.id];
+        if (cached && now - cached.timestamp < GIT_CHECK_TTL_MS) {
+          app._updateAvailable = cached.updateAvailable;
+          app._remoteCommit = cached.remoteCommit;
+          return;
+        }
+        try {
+          const result = await fetch(`${API_BASE}/apps/${app.id}/check-git-update`);
+          if (result.ok) {
+            const data = await result.json();
+            gitUpdateCache[app.id] = {
+              timestamp: now,
+              updateAvailable: data.update_available,
+              remoteCommit: data.remote_commit,
+            };
+            app._updateAvailable = data.update_available;
+            app._remoteCommit = data.remote_commit;
+          }
+        } catch (error) {
+          console.error(`Failed to check git updates for app ${app.id}:`, error);
+        }
+      }),
+    );
 
     renderApps();
     updateStats();
@@ -465,6 +499,18 @@ function getAppActions(app) {
     );
   }
 
+  // Git update controls (for git-based apps that are not deleted)
+  if (app.git_url && app.state !== "deleted" && app.state !== "DELETED") {
+    if (app._updateAvailable === true) {
+      const shortCommit = app._remoteCommit ? app._remoteCommit.substring(0, 8) : "unknown";
+      actions.push(
+        `<button class="btn btn-success btn-small" onclick="pullGitUpdate(${app.id}, '${shortCommit}')">⬆ Pull Update (${shortCommit})</button>`,
+      );
+    } else if (app._updateAvailable === false) {
+      actions.push(`<span class="btn btn-secondary btn-small" style="opacity:0.6;">✓ Up to date</span>`);
+    }
+  }
+
   return actions.join("");
 }
 
@@ -661,6 +707,39 @@ async function handleGitUpdate(e) {
     loadApps();
   } catch (error) {
     alert(`Update failed: ${error.message}`);
+  }
+}
+
+// Pull the latest Git commit for an app directly from the card button
+async function pullGitUpdate(appId, remoteCommitShort) {
+  const confirmed = confirm(
+    `New commit ${remoteCommitShort} is available.\n\nPull update and restart the app?`,
+  );
+  if (!confirmed) return;
+
+  try {
+    const formData = new FormData();
+    formData.append("backup", "true");
+
+    const response = await fetch(`${API_BASE}/apps/${appId}/update/git`, {
+      method: "POST",
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || "Update failed");
+    }
+
+    const result = await response.json();
+
+    // Invalidate the cache entry so next load re-checks the remote
+    delete gitUpdateCache[appId];
+
+    alert(result.message || "App updated successfully!");
+    loadApps();
+  } catch (error) {
+    alert(`Pull failed: ${error.message}`);
   }
 }
 

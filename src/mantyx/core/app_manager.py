@@ -533,7 +533,7 @@ class AppManager:
                     "old_commit": old_commit or "",
                     "new_commit": new_commit,
                     "changed": False,
-                    "backup_created": False,
+                    "backup_created": backup,
                 }
 
             # Reinstall dependencies in case they changed
@@ -596,6 +596,60 @@ class AppManager:
         except Exception as e:
             logger.error(f"Failed to pull Git updates for {app_name}: {e}", app_id=app_id)
             # TODO: Implement rollback from backup
+            raise
+
+    def check_git_update(self, app_id: int) -> dict[str, Any]:
+        """Check whether the remote Git repository has new commits without modifying local files."""
+        logger.info(f"Checking for Git updates for app {app_id}")
+
+        with get_db() as session:
+            app = session.query(App).filter(App.id == app_id).first()
+            if not app:
+                raise ValueError(f"App {app_id} not found")
+
+            if not app.git_url:
+                raise ValueError(f"App {app.name} is not a Git-based app")
+
+            if app.is_deleted:
+                raise ValueError(f"Cannot check deleted app {app.name}")
+
+            app_name = app.name
+            git_branch = app.git_branch or "main"
+            local_commit = app.git_commit or ""
+
+        source_dir = self._get_app_source_dir(app_name)
+
+        try:
+            repo = Repo(source_dir)
+            origin = repo.remotes.origin
+            origin.fetch()
+
+            # Resolve the remote tracking ref for the configured branch
+            try:
+                remote_commit = origin.refs[git_branch].commit.hexsha
+            except (IndexError, AttributeError) as e:
+                raise ValueError(f"Remote branch '{git_branch}' not found after fetch: {e}")
+
+            update_available = remote_commit != local_commit
+
+            logger.info(
+                f"Git check for {app_name}: local={local_commit[:8] if local_commit else 'unknown'} "
+                f"remote={remote_commit[:8]} update_available={update_available}",
+                app_id=app_id,
+            )
+
+            return {
+                "app_id": app_id,
+                "app_name": app_name,
+                "update_available": update_available,
+                "local_commit": local_commit,
+                "remote_commit": remote_commit,
+            }
+
+        except ValueError:
+            raise
+        except Exception as e:
+            logger.error(f"Failed to check Git updates for {app_name}: {e}", app_id=app_id)
             raise
 
     def _backup_app(self, app_name: str) -> Path:

@@ -179,6 +179,14 @@ class UpdateResponse(BaseModel):
     message: str
 
 
+class GitUpdateCheckResponse(BaseModel):
+    app_id: int
+    app_name: str
+    update_available: bool
+    local_commit: str
+    remote_commit: str
+
+
 # Status schemas
 class AppStatusResponse(BaseModel):
     app_id: int
