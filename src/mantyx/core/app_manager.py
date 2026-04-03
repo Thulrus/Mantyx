@@ -249,6 +249,9 @@ class AppManager:
 
     def enable_app(self, app_id: int) -> None:
         """Enable an app."""
+        is_perpetual = False
+        app_ref = None
+
         with get_db() as session:
             app = session.query(App).filter(App.id == app_id).first()
             if not app:
@@ -261,12 +264,14 @@ class AppManager:
 
             app.state = AppState.ENABLED
             session.add(app)
+            is_perpetual = app.app_type == AppType.PERPETUAL
+            app_ref = app  # Detached after session closes; scalar attrs are still accessible
 
-            # If perpetual app, start it
-            if app.app_type == AppType.PERPETUAL:
-                self.supervisor.start_app(app)
+        # Start AFTER the session commits ENABLED — otherwise the commit overwrites RUNNING.
+        if is_perpetual:
+            self.supervisor.start_app(app_ref)
 
-            logger.info(f"App {app.name} enabled", app_id=app.id)
+        logger.info(f"App {app_ref.name} enabled", app_id=app_id)
 
     def disable_app(self, app_id: int) -> None:
         """Disable an app."""
@@ -334,10 +339,6 @@ class AppManager:
                 app.version = ".".join(version_parts)
                 session.add(app)
 
-                # Restart if was running
-                if was_running:
-                    self.supervisor.start_app(app)
-
                 logger.info(f"App {app.name} updated successfully", app_id=app.id)
 
             except Exception as e:
@@ -347,6 +348,13 @@ class AppManager:
             finally:
                 if temp_dir.exists():
                     shutil.rmtree(temp_dir)
+
+        # Restart AFTER the session commits — otherwise the commit overwrites RUNNING.
+        if was_running:
+            with get_db() as session:
+                fresh_app = session.query(App).filter(App.id == app_id).first()
+                if fresh_app:
+                    self.supervisor.start_app(fresh_app)
 
     def update_app_from_zip(
         self,

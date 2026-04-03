@@ -15,8 +15,9 @@ from mantyx.api import apps, executions, schedules, settings
 from mantyx.config import get_settings
 from mantyx.core.scheduler import AppScheduler
 from mantyx.core.supervisor import ProcessSupervisor
-from mantyx.database import init_db
+from mantyx.database import get_db, init_db
 from mantyx.logging import get_logger
+from mantyx.models.app import App, AppState, AppType
 
 logger = get_logger("main")
 
@@ -48,6 +49,32 @@ async def lifespan(app: FastAPI):
     # Start supervisor
     supervisor = ProcessSupervisor()
     logger.info("Supervisor initialized")
+
+    # Auto-start perpetual apps that were running or enabled before shutdown
+    with get_db() as session:
+        perpetual_apps = (
+            session.query(App)
+            .filter(
+                App.app_type == AppType.PERPETUAL,
+                App.state.in_([AppState.RUNNING, AppState.ENABLED]),
+                App.is_deleted == False,  # noqa: E712
+            )
+            .all()
+        )
+        # Detach from session before iterating (avoids DetachedInstanceError)
+        session.expunge_all()
+
+    for perpetual_app in perpetual_apps:
+        try:
+            supervisor.adopt_app(perpetual_app)
+            logger.info(
+                f"Auto-started perpetual app: {perpetual_app.name}", app_id=perpetual_app.id
+            )
+        except Exception as e:
+            logger.error(
+                f"Failed to auto-start perpetual app: {perpetual_app.name}: {e}",
+                app_id=perpetual_app.id,
+            )
 
     # Register signal handlers
     def signal_handler(signum, frame):
