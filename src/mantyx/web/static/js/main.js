@@ -12,6 +12,10 @@ let systemTimezone = "UTC";
 const gitUpdateCache = {};
 const SHORT_COMMIT_LENGTH = 8;
 
+function getShortCommit(commit) {
+  return commit ? commit.substring(0, SHORT_COMMIT_LENGTH) : "";
+}
+
 // Initialize
 document.addEventListener("DOMContentLoaded", () => {
   initializeEventListeners();
@@ -233,7 +237,9 @@ async function loadApps() {
     // Check for git updates in parallel (rate-limited to once every 5 minutes per app)
     const GIT_CHECK_TTL_MS = 5 * 60 * 1000;
     const now = Date.now();
-    const gitApps = apps.filter((a) => a.git_url);
+    const gitApps = apps.filter(
+      (a) => a.git_url && a.state !== "DELETED" && a.state !== "deleted",
+    );
 
     await Promise.all(
       gitApps.map(async (app) => {
@@ -509,9 +515,7 @@ function getAppActions(app) {
   // Git update controls (for git-based apps that are not deleted)
   if (app.git_url && app.state !== "deleted" && app.state !== "DELETED") {
     if (app._updateAvailable === true) {
-      const shortCommit = app._remoteCommit
-        ? app._remoteCommit.substring(0, SHORT_COMMIT_LENGTH)
-        : "unknown";
+      const shortCommit = getShortCommit(app._remoteCommit) || "unknown";
       actions.push(
         `<button class="btn btn-success btn-small" onclick="pullGitUpdate(${app.id}, '${shortCommit}')">⬆ Pull Update (${shortCommit})</button>`,
       );
@@ -649,7 +653,7 @@ function showUpdateModal(appId) {
   if (app.git_url) {
     gitTab.style.display = "block";
     document.getElementById("updateGitInfo").textContent =
-      `Repository: ${app.git_url}\nBranch: ${app.git_branch || "main"}\nCurrent commit: ${app.git_commit ? app.git_commit.substring(0, 8) : "unknown"}`;
+      `Repository: ${app.git_url}\nBranch: ${app.git_branch || "main"}\nCurrent commit: ${getShortCommit(app.git_commit) || "unknown"}`;
   } else {
     gitTab.style.display = "none";
     // Reset to ZIP tab if Git was selected

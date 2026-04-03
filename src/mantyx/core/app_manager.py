@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from git import Repo
+from git import exc as git_exc
 
 from mantyx.config import get_settings
 from mantyx.core.scheduler import AppScheduler
@@ -615,7 +616,6 @@ class AppManager:
 
             app_name = app.name
             git_branch = app.git_branch or "main"
-            local_commit = app.git_commit or ""
 
         source_dir = self._get_app_source_dir(app_name)
 
@@ -624,13 +624,25 @@ class AppManager:
             origin = repo.remotes.origin
             origin.fetch()
 
-            # Resolve the remote tracking ref for the configured branch
+            # Use the actual checked-out commit from disk (not the possibly-stale DB value)
+            local_commit = repo.head.commit.hexsha
+
+            # Resolve the remote tracking ref (e.g. "origin/main")
             try:
-                remote_commit = origin.refs[git_branch].commit.hexsha
-            except (IndexError, AttributeError):
+                remote_commit = repo.commit(f"origin/{git_branch}").hexsha
+            except git_exc.BadName:
                 raise ValueError(f"Remote branch '{git_branch}' not found after fetch")
 
-            update_available = remote_commit != local_commit
+            # Count commits that are in origin/<branch> but not in the local HEAD.
+            # This is >0 when the remote is strictly ahead, and stays 0 if local is
+            # ahead or diverged — both of which don't need a pull from the user's POV.
+            if local_commit:
+                remote_ahead_count = int(
+                    repo.git.rev_list("--count", f"{local_commit}..{remote_commit}")
+                )
+                update_available = remote_ahead_count > 0
+            else:
+                update_available = True
 
             logger.info(
                 f"Git check for {app_name}: local={local_commit[:8] if local_commit else 'unknown'} "
