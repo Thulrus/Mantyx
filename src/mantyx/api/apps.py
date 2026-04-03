@@ -11,6 +11,7 @@ from mantyx.api.schemas import (
     AppResponse,
     AppStatusResponse,
     AppUpdate,
+    GitUpdateCheckResponse,
     UpdateResponse,
     UploadResponse,
 )
@@ -155,10 +156,6 @@ async def upload_git(
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to create app from Git: {str(e)}")
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/{app_id}/install")
@@ -338,6 +335,21 @@ def update_app_git(
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to pull Git updates: {str(e)}")
+
+
+@router.get("/{app_id}/check-git-update", response_model=GitUpdateCheckResponse)
+def check_git_update(
+    app_id: int,
+    app_manager: AppManager = Depends(get_app_manager),
+):
+    """Check if the remote Git repository has new commits (read-only, safe to call anytime)."""
+    try:
+        result = app_manager.check_git_update(app_id)
+        return GitUpdateCheckResponse(**result)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to check Git updates: {str(e)}")
 
 
 @router.post("/{app_id}/run")
