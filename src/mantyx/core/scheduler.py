@@ -115,6 +115,12 @@ def execute_scheduled_app(app_id: int, schedule_id: int | None) -> None:
         if app_environment:
             env.update(app_environment)
 
+        # Inject persistent data directory so apps can store runtime data
+        # that survives upgrades. Apps read: Path(os.environ["APP_DATA_DIR"])
+        app_data_dir = settings.apps_dir / app_name / "data"
+        app_data_dir.mkdir(parents=True, exist_ok=True)
+        env["APP_DATA_DIR"] = str(app_data_dir)
+
         # Execute
         with open(stdout_path, "w") as stdout_file, open(stderr_path, "w") as stderr_file:
             result = subprocess.run(

@@ -76,6 +76,12 @@ class ProcessSupervisor:
             if app.environment:
                 env.update(app.environment)
 
+            # Inject persistent data directory so apps can store runtime data
+            # that survives upgrades. Apps read: Path(os.environ["APP_DATA_DIR"])
+            app_data_dir = self.settings.apps_dir / app.name / "data"
+            app_data_dir.mkdir(parents=True, exist_ok=True)
+            env["APP_DATA_DIR"] = str(app_data_dir)
+
             # Start process
             with open(stdout_path, "w") as stdout_file, open(stderr_path, "w") as stderr_file:
                 process = subprocess.Popen(

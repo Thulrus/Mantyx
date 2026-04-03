@@ -335,6 +335,32 @@
                 placeholder="What does this app do?"
               ></textarea>
             </div>
+
+            <div class="alert alert-info">
+              <strong>Persistent Data Storage</strong>
+              Mantyx automatically injects an
+              <code>APP_DATA_DIR</code> environment variable pointing to a
+              directory that persists across upgrades. Use it in your app to
+              store runtime data:
+              <pre
+                style="
+                  margin: 0.5rem 0 0;
+                  font-size: 0.8125rem;
+                  white-space: pre-wrap;
+                "
+              >
+import os
+from pathlib import Path
+
+data_dir = Path(os.environ.get("APP_DATA_DIR", "./data"))
+data_dir.mkdir(parents=True, exist_ok=True)</pre
+              >
+              <small style="display: block; margin-top: 0.5rem">
+                ⚠️ This directory is permanently removed only when the app is
+                deleted. Upgrades leave it untouched.
+              </small>
+            </div>
+
             <button type="submit" class="btn btn-primary">Upload</button>
           </form>
         </div>
@@ -569,6 +595,32 @@
                 placeholder="What does this app do?"
               ></textarea>
             </div>
+
+            <div class="alert alert-info">
+              <strong>Persistent Data Storage</strong>
+              Mantyx automatically injects an
+              <code>APP_DATA_DIR</code> environment variable pointing to a
+              directory that persists across upgrades. Use it in your app to
+              store runtime data:
+              <pre
+                style="
+                  margin: 0.5rem 0 0;
+                  font-size: 0.8125rem;
+                  white-space: pre-wrap;
+                "
+              >
+import os
+from pathlib import Path
+
+data_dir = Path(os.environ.get("APP_DATA_DIR", "./data"))
+data_dir.mkdir(parents=True, exist_ok=True)</pre
+              >
+              <small style="display: block; margin-top: 0.5rem">
+                ⚠️ This directory is permanently removed only when the app is
+                deleted. Upgrades leave it untouched.
+              </small>
+            </div>
+
             <button type="submit" class="btn btn-primary">
               Clone & Upload
             </button>
