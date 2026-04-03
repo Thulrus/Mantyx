@@ -36,16 +36,29 @@ class ProcessSupervisor:
 
     def start_app(self, app: App) -> Execution:
         """Start a perpetual app."""
+        # Re-fetch the app from the DB and extract all needed scalar attributes now.
+        # The `app` object passed in may be expired+detached (session was committed and
+        # closed by the caller), so accessing any non-PK attribute on it directly would
+        # raise DetachedInstanceError.  app.id (PK) is safe as SQLAlchemy retains it in
+        # the instance identity key even after expiry.
+        app_id = app.id
         with get_db() as session:
-            current_state = session.query(App.state).filter(App.id == app.id).scalar()
-        if current_state == AppState.RUNNING:
-            raise RuntimeError(f"App {app.name} is already running")
+            fresh = session.query(App).filter(App.id == app_id).first()
+            if fresh is None:
+                raise RuntimeError(f"App {app_id} not found")
+            current_state = fresh.state
+            app_name = fresh.name
+            app_entrypoint = fresh.entrypoint
+            app_environment = fresh.environment
 
-        logger.info(f"Starting app: {app.name}", app_id=app.id)
+        if current_state == AppState.RUNNING:
+            raise RuntimeError(f"App {app_name} is already running")
+
+        logger.info(f"Starting app: {app_name}", app_id=app_id)
 
         # Create execution record
         execution = Execution(
-            app_id=app.id,
+            app_id=app_id,
             status=ExecutionStatus.PENDING,
             trigger_type="manual",
         )
@@ -57,28 +70,28 @@ class ProcessSupervisor:
 
         try:
             # Get paths
-            app_dir = self._get_app_dir(app.name)
-            entrypoint = app_dir / app.entrypoint
+            app_dir = self._get_app_dir(app_name)
+            entrypoint = app_dir / app_entrypoint
 
             if not entrypoint.exists():
                 raise RuntimeError(f"Entrypoint not found: {entrypoint}")
 
             # Get Python executable
-            python_exe = self.venv_manager.get_python_executable(app.name)
+            python_exe = self.venv_manager.get_python_executable(app_name)
             if not python_exe.exists():
-                raise RuntimeError(f"Virtual environment not found for {app.name}")
+                raise RuntimeError(f"Virtual environment not found for {app_name}")
 
             # Prepare log files
-            stdout_path, stderr_path = get_app_log_path(app.name, execution_id)
+            stdout_path, stderr_path = get_app_log_path(app_name, execution_id)
 
             # Prepare environment
             env = os.environ.copy()
-            if app.environment:
-                env.update(app.environment)
+            if app_environment:
+                env.update(app_environment)
 
             # Inject persistent data directory so apps can store runtime data
             # that survives upgrades. Apps read: Path(os.environ["APP_DATA_DIR"])
-            app_data_dir = self.settings.apps_dir / app.name / "data"
+            app_data_dir = self.settings.apps_dir / app_name / "data"
             app_data_dir.mkdir(parents=True, exist_ok=True)
             env["APP_DATA_DIR"] = str(app_data_dir)
 
@@ -103,23 +116,23 @@ class ProcessSupervisor:
                     exec_obj.stdout_path = str(stdout_path)
                     exec_obj.stderr_path = str(stderr_path)
 
-                app_obj = session.query(App).filter(App.id == app.id).first()
+                app_obj = session.query(App).filter(App.id == app_id).first()
                 if app_obj:
                     app_obj.state = AppState.RUNNING
                     app_obj.pid = process.pid
 
-            self._processes[app.id] = process
+            self._processes[app_id] = process
 
             logger.info(
-                f"App {app.name} started with PID {process.pid}",
-                app_id=app.id,
+                f"App {app_name} started with PID {process.pid}",
+                app_id=app_id,
                 execution_id=execution_id,
             )
 
             return execution
 
         except Exception as e:
-            logger.error(f"Failed to start app {app.name}: {e}", app_id=app.id)
+            logger.error(f"Failed to start app {app_name}: {e}", app_id=app_id)
 
             # Update execution status
             with get_db() as session:
@@ -129,7 +142,7 @@ class ProcessSupervisor:
                     exec_obj.ended_at = datetime.now()
                     exec_obj.error_message = str(e)
 
-                app_obj = session.query(App).filter(App.id == app.id).first()
+                app_obj = session.query(App).filter(App.id == app_id).first()
                 if app_obj:
                     app_obj.state = AppState.FAILED
                     app_obj.last_error = str(e)

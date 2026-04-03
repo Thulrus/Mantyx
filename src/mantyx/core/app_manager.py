@@ -255,7 +255,6 @@ class AppManager:
     def enable_app(self, app_id: int) -> None:
         """Enable an app."""
         is_perpetual = False
-        app_ref = None
 
         with get_db() as session:
             app = session.query(App).filter(App.id == app_id).first()
@@ -270,13 +269,14 @@ class AppManager:
             app.state = AppState.ENABLED
             session.add(app)
             is_perpetual = app.app_type == AppType.PERPETUAL
-            app_ref = app  # Detached after session closes; scalar attrs are still accessible
+            app_name = app.name  # extract before session commits and expires attributes
 
         # Start AFTER the session commits ENABLED — otherwise the commit overwrites RUNNING.
+        # start_app re-fetches the app from DB, so only app.id (PK) is needed here.
         if is_perpetual:
-            self.supervisor.start_app(app_ref)
+            self.supervisor.start_app(app)
 
-        logger.info(f"App {app_ref.name} enabled", app_id=app_id)
+        logger.info(f"App {app_name} enabled", app_id=app_id)
 
     def disable_app(self, app_id: int) -> None:
         """Disable an app."""
