@@ -10,6 +10,7 @@ let systemTimezone = "UTC";
 
 // Per-app git update check cache: { [appId]: { timestamp, updateAvailable, remoteCommit } }
 const gitUpdateCache = {};
+const SHORT_COMMIT_LENGTH = 8;
 
 // Initialize
 document.addEventListener("DOMContentLoaded", () => {
@@ -253,9 +254,15 @@ async function loadApps() {
             };
             app._updateAvailable = data.update_available;
             app._remoteCommit = data.remote_commit;
+          } else {
+            // Non-2xx: mark as unknown so the card renders without update indicators
+            app._updateAvailable = undefined;
+            app._remoteCommit = undefined;
           }
         } catch (error) {
           console.error(`Failed to check git updates for app ${app.id}:`, error);
+          app._updateAvailable = undefined;
+          app._remoteCommit = undefined;
         }
       }),
     );
@@ -502,7 +509,9 @@ function getAppActions(app) {
   // Git update controls (for git-based apps that are not deleted)
   if (app.git_url && app.state !== "deleted" && app.state !== "DELETED") {
     if (app._updateAvailable === true) {
-      const shortCommit = app._remoteCommit ? app._remoteCommit.substring(0, 8) : "unknown";
+      const shortCommit = app._remoteCommit
+        ? app._remoteCommit.substring(0, SHORT_COMMIT_LENGTH)
+        : "unknown";
       actions.push(
         `<button class="btn btn-success btn-small" onclick="pullGitUpdate(${app.id}, '${shortCommit}')">⬆ Pull Update (${shortCommit})</button>`,
       );

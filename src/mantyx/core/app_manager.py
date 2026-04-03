@@ -627,8 +627,8 @@ class AppManager:
             # Resolve the remote tracking ref for the configured branch
             try:
                 remote_commit = origin.refs[git_branch].commit.hexsha
-            except (IndexError, AttributeError) as e:
-                raise ValueError(f"Remote branch '{git_branch}' not found after fetch: {e}")
+            except (IndexError, AttributeError):
+                raise ValueError(f"Remote branch '{git_branch}' not found after fetch")
 
             update_available = remote_commit != local_commit
 
