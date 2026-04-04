@@ -347,9 +347,10 @@ class AppScheduler:
             replace_existing=True,
         )
 
-        # Get next run time
+        # Get next run time — guarded for APScheduler 3.x/4.x compatibility
+        # (next_run_time was removed from Job in APScheduler 4.x)
         job = self._scheduler.get_job(job_id)
-        next_run = job.next_run_time if job else None
+        next_run = getattr(job, "next_run_time", None) if job else None
 
         logger.info(
             f"Added schedule '{schedule.name}' for app '{schedule.app.name}' - Next run: {next_run}",
@@ -401,8 +402,9 @@ class AppScheduler:
 
         jobs_info = []
         for job in self._scheduler.get_jobs():
-            # Get next run time and convert to local timezone if needed
-            next_run = job.next_run_time
+            # Get next run time and convert to local timezone if needed.
+            # Guarded with getattr for APScheduler 3.x/4.x compatibility.
+            next_run = getattr(job, "next_run_time", None)
             next_run_local = None
             if next_run:
                 # Ensure next_run has timezone info

@@ -272,9 +272,10 @@ class AppManager:
             app_name = app.name  # extract before session commits and expires attributes
 
         # Start AFTER the session commits ENABLED — otherwise the commit overwrites RUNNING.
-        # start_app re-fetches the app from DB, so only app.id (PK) is needed here.
+        # start_app takes an int app_id; never pass the ORM object as it is
+        # expired+detached by the time we get here (session committed and closed above).
         if is_perpetual:
-            self.supervisor.start_app(app)
+            self.supervisor.start_app(app_id)
 
         logger.info(f"App {app_name} enabled", app_id=app_id)
 
@@ -356,10 +357,7 @@ class AppManager:
 
         # Restart AFTER the session commits — otherwise the commit overwrites RUNNING.
         if was_running:
-            with get_db() as session:
-                fresh_app = session.query(App).filter(App.id == app_id).first()
-                if fresh_app:
-                    self.supervisor.start_app(fresh_app)
+            self.supervisor.start_app(app_id)
 
     def update_app_from_zip(
         self,
@@ -448,11 +446,8 @@ class AppManager:
 
             # Restart if it was running or enabled
             if was_running:
-                with get_db() as session:
-                    app = session.query(App).filter(App.id == app_id).first()
-                    if app:
-                        self.supervisor.start_app(app)
-                        logger.info(f"Restarted app {app_name} after update")
+                self.supervisor.start_app(app_id)
+                logger.info(f"Restarted app {app_name} after update")
 
             logger.info(
                 f"App {app_name} updated successfully from {old_version} to {new_version}",
@@ -525,10 +520,7 @@ class AppManager:
 
                 # Restart if it was running
                 if was_running:
-                    with get_db() as session:
-                        app = session.query(App).filter(App.id == app_id).first()
-                        if app:
-                            self.supervisor.start_app(app)
+                    self.supervisor.start_app(app_id)
 
                 return {
                     "app_id": app_id,
@@ -575,11 +567,8 @@ class AppManager:
 
             # Restart if it was running
             if was_running:
-                with get_db() as session:
-                    app = session.query(App).filter(App.id == app_id).first()
-                    if app:
-                        self.supervisor.start_app(app)
-                        logger.info(f"Restarted app {app_name} after update")
+                self.supervisor.start_app(app_id)
+                logger.info(f"Restarted app {app_name} after update")
 
             old_commit_short = old_commit[:8] if old_commit else "unknown"
             logger.info(

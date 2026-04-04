@@ -76,14 +76,26 @@ async def lifespan(app: FastAPI):
                 app_id=perpetual_app.id,
             )
 
-    # Register signal handlers
+    # Register signal handlers.
+    # IMPORTANT: do NOT call sys.exit() inside a signal handler that fires while
+    # uvloop/asyncio is running — it raises SystemExit mid-coroutine, which leaves
+    # async generators in a "already running" state that prevents clean shutdown.
+    # Instead, schedule a stop on the running event loop so uvicorn can shut down
+    # naturally, which will trigger the lifespan `yield` to resume and run cleanup.
+    import asyncio
+
     def signal_handler(signum, frame):
         logger.info(f"Received signal {signum}, shutting down...")
-        if scheduler:
-            scheduler.stop()
-        if supervisor:
-            supervisor.cleanup()
-        sys.exit(0)
+        try:
+            loop = asyncio.get_running_loop()
+            loop.call_soon_threadsafe(loop.stop)
+        except RuntimeError:
+            # No running loop (e.g. sync context) — safe to exit directly
+            if scheduler:
+                scheduler.stop()
+            if supervisor:
+                supervisor.cleanup()
+            sys.exit(0)
 
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)

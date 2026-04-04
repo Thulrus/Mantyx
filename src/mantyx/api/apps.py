@@ -218,7 +218,7 @@ def start_app(
         raise HTTPException(status_code=400, detail="Only perpetual apps can be started")
 
     try:
-        app_manager.supervisor.start_app(app)
+        app_manager.supervisor.start_app(app_id)
         return {"message": "App started successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

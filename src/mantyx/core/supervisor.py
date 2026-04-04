@@ -34,14 +34,13 @@ class ProcessSupervisor:
         """Get the app's directory."""
         return self.settings.apps_dir / app_name / "app"
 
-    def start_app(self, app: App) -> Execution:
+    def start_app(self, app_id: int) -> Execution:
         """Start a perpetual app."""
         # Re-fetch the app from the DB and extract all needed scalar attributes now.
-        # The `app` object passed in may be expired+detached (session was committed and
-        # closed by the caller), so accessing any non-PK attribute on it directly would
-        # raise DetachedInstanceError.  app.id (PK) is safe as SQLAlchemy retains it in
-        # the instance identity key even after expiry.
-        app_id = app.id
+        # Callers must pass the integer app_id rather than an ORM App object, because
+        # App objects may be expired+detached (session committed and closed by the caller)
+        # and accessing ANY attribute on them — including the PK — raises
+        # DetachedInstanceError when expire_on_commit=True.
         with get_db() as session:
             fresh = session.query(App).filter(App.id == app_id).first()
             if fresh is None:
@@ -56,19 +55,20 @@ class ProcessSupervisor:
 
         logger.info(f"Starting app: {app_name}", app_id=app_id)
 
-        # Create execution record
-        execution = Execution(
-            app_id=app_id,
-            status=ExecutionStatus.PENDING,
-            trigger_type="manual",
-        )
-
-        with get_db() as session:
-            session.add(execution)
-            session.flush()
-            execution_id = execution.id
-
+        # Create execution record inside the try block so any DB error is caught,
+        # logged, and the app state is rolled back rather than silently 500-ing.
+        execution_id: int | None = None
         try:
+            execution = Execution(
+                app_id=app_id,
+                status=ExecutionStatus.PENDING,
+                trigger_type="manual",
+            )
+            with get_db() as session:
+                session.add(execution)
+                session.flush()
+                execution_id = execution.id
+
             # Get paths
             app_dir = self._get_app_dir(app_name)
             entrypoint = app_dir / app_entrypoint
@@ -134,13 +134,15 @@ class ProcessSupervisor:
         except Exception as e:
             logger.error(f"Failed to start app {app_name}: {e}", app_id=app_id)
 
-            # Update execution status
+            # Update execution and app state; execution_id may be None if the DB
+            # insert itself failed (that's why the insert is inside this try block).
             with get_db() as session:
-                exec_obj = session.query(Execution).filter(Execution.id == execution_id).first()
-                if exec_obj:
-                    exec_obj.status = ExecutionStatus.FAILED
-                    exec_obj.ended_at = datetime.now()
-                    exec_obj.error_message = str(e)
+                if execution_id is not None:
+                    exec_obj = session.query(Execution).filter(Execution.id == execution_id).first()
+                    if exec_obj:
+                        exec_obj.status = ExecutionStatus.FAILED
+                        exec_obj.ended_at = datetime.now()
+                        exec_obj.error_message = str(e)
 
                 app_obj = session.query(App).filter(App.id == app_id).first()
                 if app_obj:
@@ -231,7 +233,7 @@ class ProcessSupervisor:
                 app_obj.restart_count += 1
                 app_obj.last_restart_at = datetime.now()
 
-        return self.start_app(app)
+        return self.start_app(app.id)
 
     def adopt_app(self, app: App) -> None:
         """Re-adopt an orphaned perpetual app process, or start fresh if the process is gone.
@@ -266,12 +268,7 @@ class ProcessSupervisor:
                 app_obj.pid = None
             self._close_orphaned_executions(app.id, session)
 
-        # Re-fetch app with updated state for start_app
-        with get_db() as session:
-            fresh_app = session.query(App).filter(App.id == app.id).first()
-            session.expunge(fresh_app)
-
-        self.start_app(fresh_app)
+        self.start_app(app.id)
 
     def check_app_running(self, app: App) -> bool:
         """Check if an app is actually running."""
