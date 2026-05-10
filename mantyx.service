@@ -6,8 +6,8 @@ After=network.target
 Type=simple
 User=mantyx
 Group=mantyx
-WorkingDirectory=/srv/mantyx
-Environment="MANTYX_BASE_DIR=/srv/mantyx"
+WorkingDirectory=/mnt/storage/mantyx
+Environment="MANTYX_BASE_DIR=/mnt/storage/mantyx"
 Environment="MANTYX_HOST=0.0.0.0"
 Environment="MANTYX_PORT=8420"
 ExecStart=/usr/bin/python3 -m mantyx.app
@@ -19,7 +19,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/srv/mantyx
+ReadWritePaths=/mnt/storage/mantyx
 
 # Logging
 StandardOutput=journal

@@ -72,7 +72,7 @@ class Settings(BaseSettings):
 
     # Base paths
     base_dir: Path = Field(
-        default=Path("/srv/mantyx"),
+        default=Path("/mnt/storage/mantyx"),
         description="Base directory for all Mantyx data",
     )
 

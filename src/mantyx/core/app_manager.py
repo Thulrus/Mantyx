@@ -666,11 +666,6 @@ class AppManager:
         source_dir = self._get_app_source_dir(app_name)
         shutil.copytree(source_dir, backup_dir / "app")
 
-        # Also back up the persistent data directory if it exists
-        data_dir = self._get_app_dir(app_name) / "data"
-        if data_dir.exists():
-            shutil.copytree(data_dir, backup_dir / "data")
-
         logger.info(f"Created backup for {app_name} at {backup_dir}")
         return backup_dir
 

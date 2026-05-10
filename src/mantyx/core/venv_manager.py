@@ -97,7 +97,8 @@ class VenvManager:
             Installation output
         """
         if not self.exists(app_name):
-            raise RuntimeError(f"No venv exists for {app_name}")
+            logger.info(f"No venv found for {app_name}, creating one")
+            self.create(app_name)
 
         pip_path = self.get_pip_executable(app_name)
 
