@@ -18,7 +18,10 @@ from mantyx.api.schemas import (
 from mantyx.config import get_settings
 from mantyx.core.app_manager import AppManager
 from mantyx.database import get_db_session
+from mantyx.logging import get_logger
 from mantyx.models.app import App, AppState, AppType
+
+logger = get_logger("api.apps")
 
 router = APIRouter(prefix="/apps", tags=["apps"])
 
@@ -254,7 +257,7 @@ def restart_app(
         raise HTTPException(status_code=404, detail="App not found")
 
     try:
-        app_manager.supervisor.restart_app(app)
+        app_manager.supervisor.restart_app(app.id)
         return {"message": "App restarted successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -372,8 +375,19 @@ def run_scheduled_app(
     if app.state not in (AppState.ENABLED, AppState.STOPPED, AppState.INSTALLED, AppState.DISABLED):
         raise HTTPException(status_code=400, detail=f"Cannot run app in state: {app.state}")
 
+    app_name = app.name
+
+    def _run():
+        try:
+            execute_scheduled_app(app_id, None)
+        except Exception as exc:
+            logger.error(
+                f"Background execution failed for app {app_name} ({app_id}): {exc}",
+                app_id=app_id,
+            )
+
     # Run in background thread to not block API response
-    thread = threading.Thread(target=execute_scheduled_app, args=(app_id, None))
+    thread = threading.Thread(target=_run)
     thread.start()
 
     return {"message": "App execution started"}

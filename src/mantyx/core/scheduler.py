@@ -199,8 +199,11 @@ def execute_scheduled_app(app_id: int, schedule_id: int | None) -> None:
 
 def monitor_perpetual_apps() -> None:
     """Detect and recover crashed perpetual apps (called on a fixed interval by the scheduler)."""
-    supervisor = ProcessSupervisor()
-    supervisor.monitor_apps()
+    try:
+        supervisor = ProcessSupervisor()
+        supervisor.monitor_apps()
+    except Exception as e:
+        logger.error(f"Unhandled error in perpetual-app monitor: {e}", exc_info=True)
 
 
 class AppScheduler:
@@ -254,6 +257,7 @@ class AppScheduler:
             replace_existing=True,
             coalesce=True,
             max_instances=1,
+            misfire_grace_time=self.settings.health_check_interval,
         )
         logger.info(
             f"🔍 Process monitor registered (interval: {self.settings.health_check_interval}s)"

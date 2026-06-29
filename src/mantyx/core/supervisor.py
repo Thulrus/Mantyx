@@ -107,19 +107,38 @@ class ProcessSupervisor:
                 )
 
             # Update execution and app
+            started_at = datetime.now()
             with get_db() as session:
                 exec_obj = session.query(Execution).filter(Execution.id == execution_id).first()
                 if exec_obj:
                     exec_obj.status = ExecutionStatus.RUNNING
-                    exec_obj.started_at = datetime.now()
+                    exec_obj.started_at = started_at
                     exec_obj.pid = process.pid
                     exec_obj.stdout_path = str(stdout_path)
                     exec_obj.stderr_path = str(stderr_path)
+                else:
+                    logger.error(
+                        f"Execution record {execution_id} not found after starting app {app_name}; returned state will be stale",
+                        app_id=app_id,
+                        execution_id=execution_id,
+                    )
 
                 app_obj = session.query(App).filter(App.id == app_id).first()
                 if app_obj:
                     app_obj.state = AppState.RUNNING
                     app_obj.pid = process.pid
+                else:
+                    logger.error(
+                        f"App record {app_id} ({app_name}) not found after process start",
+                        app_id=app_id,
+                    )
+
+            # Reflect committed state on the detached object so callers see accurate values
+            execution.status = ExecutionStatus.RUNNING
+            execution.started_at = started_at
+            execution.pid = process.pid
+            execution.stdout_path = str(stdout_path)
+            execution.stderr_path = str(stderr_path)
 
             self._processes[app_id] = process
 
@@ -143,12 +162,23 @@ class ProcessSupervisor:
                         exec_obj.status = ExecutionStatus.FAILED
                         exec_obj.ended_at = datetime.now()
                         exec_obj.error_message = str(e)
+                    else:
+                        logger.warning(
+                            f"Could not find execution record {execution_id} for app {app_name} during failure cleanup; record may remain in PENDING state",
+                            app_id=app_id,
+                            execution_id=execution_id,
+                        )
 
                 app_obj = session.query(App).filter(App.id == app_id).first()
                 if app_obj:
                     app_obj.state = AppState.FAILED
                     app_obj.last_error = str(e)
                     app_obj.last_error_at = datetime.now()
+                else:
+                    logger.warning(
+                        f"Could not find app record {app_id} ({app_name}) during failure cleanup",
+                        app_id=app_id,
+                    )
 
             raise
 
@@ -216,24 +246,34 @@ class ProcessSupervisor:
         if app.id in self._processes:
             del self._processes[app.id]
 
-    def restart_app(self, app: App) -> Execution:
-        """Restart an app."""
-        logger.info(f"Restarting app: {app.name}", app_id=app.id)
+    def restart_app(self, app_id: int) -> Execution:
+        """Restart an app.
 
-        if app.state == AppState.RUNNING:
-            self.stop_app(app)
+        Accepts app_id rather than an App ORM object to avoid DetachedInstanceError
+        when the caller's session has already committed and expired the object.
+        """
+        logger.info(f"Restarting app (id={app_id})", app_id=app_id)
+
+        # Load a fresh App inside our own session so attribute access is always safe.
+        # stop_app is called while the session is still open so its attribute reads work too.
+        with get_db() as session:
+            app = session.query(App).filter(App.id == app_id).first()
+            if app is None:
+                raise RuntimeError(f"App {app_id} not found")
+            if app.state == AppState.RUNNING:
+                self.stop_app(app)
 
         # Wait a moment before restarting
         time.sleep(1)
 
         # Increment restart count
         with get_db() as session:
-            app_obj = session.query(App).filter(App.id == app.id).first()
+            app_obj = session.query(App).filter(App.id == app_id).first()
             if app_obj:
                 app_obj.restart_count += 1
                 app_obj.last_restart_at = datetime.now()
 
-        return self.start_app(app.id)
+        return self.start_app(app_id)
 
     def adopt_app(self, app: App) -> None:
         """Re-adopt an orphaned perpetual app process, or start fresh if the process is gone.
@@ -283,6 +323,11 @@ class ProcessSupervisor:
 
     def monitor_apps(self) -> None:
         """Monitor all running apps and handle failures."""
+        # Collect IDs of apps that need restarting separately so the outer session
+        # can be fully committed and closed before restart_app() opens its own sessions.
+        # This prevents the two sessions from racing to update the same App row.
+        to_restart: list[int] = []
+
         with get_db() as session:
             running_apps = (
                 session.query(App)
@@ -300,22 +345,9 @@ class ProcessSupervisor:
                         app_id=app.id,
                     )
 
-                    # Check if we should restart
                     if self._should_restart(app):
-                        try:
-                            logger.info(f"Auto-restarting app {app.name}", app_id=app.id)
-                            self.restart_app(app)
-                        except Exception as e:
-                            logger.error(
-                                f"Failed to auto-restart app {app.name}: {e}",
-                                app_id=app.id,
-                            )
-                            # Mark as failed and close any orphaned running executions
-                            app.state = AppState.FAILED
-                            app.last_error = str(e)
-                            app.last_error_at = datetime.now()
-                            session.add(app)
-                            self._close_orphaned_executions(app.id, session)
+                        logger.info(f"Auto-restarting app {app.name}", app_id=app.id)
+                        to_restart.append(app.id)
                     else:
                         # Mark as failed and close any orphaned running executions
                         logger.error(
@@ -327,6 +359,25 @@ class ProcessSupervisor:
                         app.last_error_at = datetime.now()
                         session.add(app)
                         self._close_orphaned_executions(app.id, session)
+        # Outer session is now committed and closed. restart_app() opens its own
+        # sessions with no risk of racing against the reads above.
+
+        for app_id in to_restart:
+            try:
+                self.restart_app(app_id)
+            except Exception as e:
+                logger.error(
+                    f"Failed to auto-restart app {app_id}: {e}",
+                    app_id=app_id,
+                )
+                # Mark as failed in a fresh session — outer session is already closed
+                with get_db() as session:
+                    app_obj = session.query(App).filter(App.id == app_id).first()
+                    if app_obj:
+                        app_obj.state = AppState.FAILED
+                        app_obj.last_error = str(e)
+                        app_obj.last_error_at = datetime.now()
+                    self._close_orphaned_executions(app_id, session)
 
     def _close_orphaned_executions(self, app_id: int, session) -> None:
         """Close any RUNNING execution records that no longer have a live process."""
