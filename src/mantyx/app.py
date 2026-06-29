@@ -56,7 +56,7 @@ async def lifespan(app: FastAPI):
             session.query(App)
             .filter(
                 App.app_type == AppType.PERPETUAL,
-                App.state.in_([AppState.RUNNING, AppState.ENABLED]),
+                App.state.in_([AppState.RUNNING, AppState.ENABLED, AppState.FAILED]),
                 App.is_deleted == False,  # noqa: E712
             )
             .all()

@@ -94,7 +94,12 @@ def execute_scheduled_app(app_id: int, schedule_id: int | None) -> None:
         # Get Python executable
         python_exe = venv_manager.get_python_executable(app_name)
         if not python_exe.exists():
-            raise RuntimeError(f"Virtual environment not found for {app_name}")
+            logger.info(f"Virtual environment missing for {app_name}, rebuilding...")
+            requirements_file = app_dir / "requirements.txt"
+            venv_manager.install_requirements(
+                app_name,
+                requirements_file if requirements_file.exists() else None,
+            )
 
         # Prepare log files
         stdout_path, stderr_path = get_app_log_path(app_name, execution_id)
