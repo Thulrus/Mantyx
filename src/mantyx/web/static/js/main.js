@@ -966,14 +966,21 @@ async function showAppDetails(appId) {
             <h3>Recent Executions</h3>
             <div style="max-height: 300px; overflow-y: auto;">
                 ${executions
-                  .map(
-                    (exec) => `
+                  .map((exec) => {
+                    const dur =
+                      exec.started_at && exec.ended_at
+                        ? formatDuration(
+                            (new Date(exec.ended_at) - new Date(exec.started_at)) / 1000,
+                          )
+                        : null;
+                    return `
                     <div style="background: var(--bg-tertiary); padding: 0.8rem; margin: 0.5rem 0; border-radius: 4px;">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
                             <div>
-                                <strong>ID:</strong> ${exec.id} |
-                                <strong>Status:</strong> <span class="status-badge ${exec.status}">${exec.status}</span>
-                                ${exec.exit_code !== null ? ` | <strong>Exit Code:</strong> ${exec.exit_code}` : ""}
+                                <strong>#${exec.id}</strong> &nbsp;
+                                <span class="status-badge ${exec.status}">${exec.status}</span>
+                                ${exec.exit_code !== null ? ` &nbsp; <strong>Exit:</strong> ${exec.exit_code}` : ""}
+                                ${dur ? ` &nbsp; <strong>Duration:</strong> ${dur}` : ""}
                             </div>
                             <button class="btn btn-sm btn-secondary" onclick="viewExecutionLogs(${exec.id})">
                                 📄 View Logs
@@ -981,19 +988,20 @@ async function showAppDetails(appId) {
                         </div>
                         ${
                           exec.started_at
-                            ? `<div style="font-size: 0.9em; color: var(--text-secondary);"><strong>Started:</strong> ${new Date(
-                                exec.started_at,
-                              ).toLocaleString()}</div>`
+                            ? `<div style="font-size: 0.85em; color: var(--text-secondary);">
+                                <strong>Started:</strong> ${new Date(exec.started_at).toLocaleString()}
+                                ${exec.ended_at ? ` &rarr; ${new Date(exec.ended_at).toLocaleString()}` : ""}
+                               </div>`
                             : ""
                         }
                         ${
-                          exec.trigger_type
-                            ? `<div style="font-size: 0.9em; color: var(--text-secondary);"><strong>Trigger:</strong> ${exec.trigger_type}</div>`
+                          exec.error_message
+                            ? `<div style="font-size: 0.85em; color: var(--error); margin-top: 0.25rem;">⚠ ${escapeHtml(exec.error_message)}</div>`
                             : ""
                         }
                     </div>
-                `,
-                  )
+                `;
+                  })
                   .join("")}
             </div>
         </div>
@@ -1444,6 +1452,19 @@ async function refreshSchedulerDebug() {
   }
 }
 
+// Strip ANSI escape codes from terminal output
+function stripAnsi(str) {
+  return str.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, "");
+}
+
+// Format a duration in seconds as a human-readable string
+function formatDuration(seconds) {
+  if (seconds === null || seconds === undefined) return null;
+  if (seconds < 60) return `${Math.round(seconds)}s`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${Math.round(seconds % 60)}s`;
+  return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
+}
+
 // View execution logs
 async function viewExecutionLogs(executionId) {
   try {
@@ -1456,8 +1477,15 @@ async function viewExecutionLogs(executionId) {
     const stdoutData = await stdoutRes.json();
     const stderrData = await stderrRes.json();
 
-    const stdout = stdoutData.output || "(empty)";
-    const stderr = stderrData.output || "(empty)";
+    const stdout = stripAnsi(stdoutData.output || "");
+    const stderr = stripAnsi(stderrData.output || "");
+
+    const duration =
+      execution.started_at && execution.ended_at
+        ? formatDuration(
+            (new Date(execution.ended_at) - new Date(execution.started_at)) / 1000
+          )
+        : null;
 
     const content = document.getElementById("logsModalContent");
     content.innerHTML = `
@@ -1468,17 +1496,27 @@ async function viewExecutionLogs(executionId) {
           ${execution.exit_code !== null ? `<p><strong>Exit Code:</strong> ${execution.exit_code}</p>` : ""}
           ${execution.started_at ? `<p><strong>Started:</strong> ${new Date(execution.started_at).toLocaleString()}</p>` : ""}
           ${execution.ended_at ? `<p><strong>Ended:</strong> ${new Date(execution.ended_at).toLocaleString()}</p>` : ""}
+          ${duration ? `<p><strong>Duration:</strong> ${duration}</p>` : ""}
+          ${execution.trigger_type ? `<p><strong>Trigger:</strong> ${execution.trigger_type}${execution.trigger_details ? ` (${execution.trigger_details})` : ""}</p>` : ""}
         </div>
       </div>
 
+      ${
+        execution.error_message
+          ? `<div class="logs-error-banner">
+              <strong>⚠ Error:</strong> ${escapeHtml(execution.error_message)}
+            </div>`
+          : ""
+      }
+
       <div class="logs-section">
         <h4 style="color: var(--success-color); margin-bottom: 0.5rem;">📤 Standard Output (stdout)</h4>
-        <pre class="log-output">${escapeHtml(stdout)}</pre>
+        <pre class="log-output">${stdout ? escapeHtml(stdout) : '<span style="opacity:0.5">(empty)</span>'}</pre>
       </div>
 
       <div class="logs-section">
         <h4 style="color: var(--error-color); margin-bottom: 0.5rem;">📥 Standard Error (stderr)</h4>
-        <pre class="log-output">${escapeHtml(stderr)}</pre>
+        <pre class="log-output">${stderr ? escapeHtml(stderr) : '<span style="opacity:0.5">(empty)</span>'}</pre>
       </div>
     `;
 

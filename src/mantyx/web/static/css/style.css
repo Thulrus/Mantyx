@@ -1408,6 +1408,17 @@ html {
   color: var(--text-secondary);
 }
 
+.logs-error-banner {
+  background: var(--error-bg);
+  border: 1px solid var(--error);
+  border-radius: var(--radius-md);
+  color: var(--error);
+  padding: var(--spacing-md) var(--spacing-lg);
+  margin-bottom: var(--spacing-lg);
+  font-size: 0.9rem;
+  word-break: break-word;
+}
+
 .logs-section {
   margin-bottom: var(--spacing-xl);
 }

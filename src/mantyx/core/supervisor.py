@@ -301,12 +301,13 @@ class ProcessSupervisor:
             f"No live process found for app: {app.name}, starting fresh",
             app_id=app.id,
         )
+        exit_code = self._reap_process(app.pid)
         with get_db() as session:
             app_obj = session.query(App).filter(App.id == app.id).first()
             if app_obj:
                 app_obj.state = AppState.ENABLED
                 app_obj.pid = None
-            self._close_orphaned_executions(app.id, session)
+            self._close_orphaned_executions(app.id, session, exit_code=exit_code)
 
         self.start_app(app.id)
 
@@ -345,6 +346,8 @@ class ProcessSupervisor:
                         app_id=app.id,
                     )
 
+                    exit_code = self._reap_process(app.pid)
+
                     if self._should_restart(app):
                         logger.info(f"Auto-restarting app {app.name}", app_id=app.id)
                         to_restart.append(app.id)
@@ -358,7 +361,7 @@ class ProcessSupervisor:
                         app.last_error = "Exceeded maximum restart attempts"
                         app.last_error_at = datetime.now()
                         session.add(app)
-                        self._close_orphaned_executions(app.id, session)
+                        self._close_orphaned_executions(app.id, session, exit_code=exit_code)
         # Outer session is now committed and closed. restart_app() opens its own
         # sessions with no risk of racing against the reads above.
 
@@ -377,9 +380,11 @@ class ProcessSupervisor:
                         app_obj.state = AppState.FAILED
                         app_obj.last_error = str(e)
                         app_obj.last_error_at = datetime.now()
-                    self._close_orphaned_executions(app_id, session)
+                    self._close_orphaned_executions(app_id, session, exit_code=None)
 
-    def _close_orphaned_executions(self, app_id: int, session) -> None:
+    def _close_orphaned_executions(
+        self, app_id: int, session, exit_code: int | None = None
+    ) -> None:
         """Close any RUNNING execution records that no longer have a live process."""
         executions = (
             session.query(Execution)
@@ -393,7 +398,34 @@ class ProcessSupervisor:
         for execution in executions:
             execution.status = ExecutionStatus.FAILED
             execution.ended_at = now
-            execution.error_message = "Process not found; execution closed by monitor"
+            if exit_code is not None:
+                execution.exit_code = exit_code
+                execution.error_message = (
+                    f"Process (PID {execution.pid}) exited with code {exit_code}"
+                )
+            else:
+                execution.error_message = (
+                    f"Process (PID {execution.pid}) not found; closed by health monitor"
+                )
+
+    def _reap_process(self, pid: int | None) -> int | None:
+        """Try to collect the exit code of a dead child process.
+
+        Uses os.waitpid with WNOHANG so it never blocks. Returns the exit code
+        if the process was reaped, or None if it was already reaped or not our child.
+        """
+        if pid is None:
+            return None
+        try:
+            waited_pid, status = os.waitpid(pid, os.WNOHANG)
+            if waited_pid == 0:
+                return None
+            return os.waitstatus_to_exitcode(status)
+        except ChildProcessError:
+            # Process already reaped by someone else, or not our direct child
+            return None
+        except OSError:
+            return None
 
     def _should_restart(self, app: App) -> bool:
         """Determine if an app should be restarted based on restart policy."""
