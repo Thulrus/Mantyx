@@ -18,6 +18,14 @@ This directory contains database migration scripts that are automatically run du
 - Adds `last_updated_at` column (tracks when app was last updated)
 - Adds `update_count` column (counts number of updates)
 
+### add_web_port_source.py
+
+**Added**: 2026-07-14
+**Purpose**: Support automatic web-interface port detection
+
+- Adds `web_port_source` column (`"manual"` once a user has set/edited `web_url`/`web_port`, otherwise left free for the automatic port monitor to populate)
+- Backfills existing non-null `web_url`/`web_port` rows as `"manual"` so upgrades never let auto-detection clobber a value a user already configured
+
 ## Creating New Migrations
 
 When you add new database fields or make schema changes:

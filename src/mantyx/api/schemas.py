@@ -81,6 +81,7 @@ class AppResponse(AppBase):
     health_status: str | None = None
     last_error: str | None = None
     last_error_at: datetime | None = None
+    web_port_source: str | None = None
     git_url: str | None = None
     git_branch: str | None = None
     git_commit: str | None = None

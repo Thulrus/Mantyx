@@ -441,6 +441,16 @@ function formatDateTime(dateString) {
 }
 
 // Render Apps
+// Resolve the link to an app's web interface: a manually-set full URL wins,
+// otherwise fall back to the auto-detected port on the current host.
+function getAppWebLink(app) {
+  if (app.web_url) return app.web_url;
+  if (app.web_port) {
+    return `${window.location.protocol}//${window.location.hostname}:${app.web_port}`;
+  }
+  return null;
+}
+
 function renderApps() {
   const container = document.getElementById("appsList");
 
@@ -492,11 +502,12 @@ function renderApps() {
                     : ""
                 }
                 ${
-                  app.web_url
+                  getAppWebLink(app)
                     ? `
                 <div class="meta-item">
                     <span>🌐</span>
-                    <a href="${app.web_url}" target="_blank" onclick="event.stopPropagation()">Open</a>
+                    <a href="${escapeHtml(getAppWebLink(app))}" target="_blank" onclick="event.stopPropagation()">Open</a>
+                    ${app.web_port_source === "auto" ? `<span class="badge-auto" title="Auto-detected from the running process">auto</span>` : ""}
                 </div>
                 `
                     : ""
@@ -669,6 +680,48 @@ async function installApp(appId) {
   } catch (error) {
     // Progress modal already shows the failure; just refresh state.
     loadApps();
+  }
+}
+
+async function saveWebLink(appId) {
+  const port = document.getElementById("webPortInput").value;
+  const url = document.getElementById("webUrlInput").value.trim();
+
+  try {
+    await apiCall(`/apps/${appId}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        web_port: port ? parseInt(port, 10) : null,
+        web_url: url || null,
+      }),
+    });
+    await loadApps();
+    showAppDetails(appId);
+  } catch (error) {
+    // Error already handled in apiCall
+  }
+}
+
+async function clearWebLink(appId) {
+  try {
+    await apiCall(`/apps/${appId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ web_port: null, web_url: null }),
+    });
+    await loadApps();
+    showAppDetails(appId);
+  } catch (error) {
+    // Error already handled in apiCall
+  }
+}
+
+async function detectWebPortNow(appId) {
+  try {
+    await apiCall(`/apps/${appId}/detect-port`, { method: "POST" });
+    await loadApps();
+    showAppDetails(appId);
+  } catch (error) {
+    // Error already handled in apiCall
   }
 }
 
@@ -1071,6 +1124,33 @@ async function showAppDetails(appId) {
         `
             : ""
         }
+
+        <div style="margin: 1.5rem 0;">
+            <h3>Web Interface</h3>
+            ${
+              getAppWebLink(app)
+                ? `
+            <p>
+                <a href="${escapeHtml(getAppWebLink(app))}" target="_blank">${escapeHtml(getAppWebLink(app))}</a>
+                ${
+                  app.web_port_source === "auto"
+                    ? `<span class="badge-auto" title="Detected automatically from the running process">auto-detected</span>`
+                    : `<span class="badge-auto" title="Set manually">manual</span>`
+                }
+            </p>
+            `
+                : `<p style="color: var(--text-secondary);">No web interface detected yet.</p>`
+            }
+            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin: 0.5rem 0;">
+                <input type="number" id="webPortInput" placeholder="Port" value="${app.web_port || ""}" style="width: 90px;">
+                <input type="text" id="webUrlInput" placeholder="Custom URL (optional, overrides port)" value="${escapeHtml(app.web_url || "")}" style="flex: 1; min-width: 200px;">
+            </div>
+            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                <button class="btn btn-primary btn-small" onclick="saveWebLink(${app.id})">Save</button>
+                <button class="btn btn-secondary btn-small" onclick="clearWebLink(${app.id})">Reset to auto-detect</button>
+                <button class="btn btn-secondary btn-small" onclick="detectWebPortNow(${app.id})" ${app.pid ? "" : "disabled"}>Detect now</button>
+            </div>
+        </div>
 
         <div style="margin: 1.5rem 0;">
             <h3>Configuration</h3>

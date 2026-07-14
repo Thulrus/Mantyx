@@ -419,11 +419,40 @@ def update_app_config(
         raise HTTPException(status_code=404, detail="App not found")
 
     # Update fields
-    for field, value in app_update.model_dump(exclude_unset=True).items():
+    fields = app_update.model_dump(exclude_unset=True)
+    for field, value in fields.items():
         setattr(app, field, value)
+
+    # A user explicitly touching the web link takes it out of auto-detection:
+    # if they cleared both fields, hand control back to the port monitor;
+    # otherwise mark it manual so the background detector leaves it alone.
+    if "web_url" in fields or "web_port" in fields:
+        app.web_port_source = "manual" if (app.web_url or app.web_port) else None
 
     db.commit()
     db.refresh(app)
+    return app
+
+
+@router.post("/{app_id}/detect-port", response_model=AppResponse)
+def detect_app_port(
+    app_id: int,
+    app_manager: AppManager = Depends(get_app_manager),
+    db: Session = Depends(get_db_session),
+):
+    """Retry automatic web-port detection now instead of waiting for the next monitor tick.
+
+    No-ops (but still returns the current app) if the app isn't running or the
+    web link has been set manually — clear it first via PATCH to re-enable detection.
+    """
+    app = db.query(App).filter(App.id == app_id).first()
+    if not app:
+        raise HTTPException(status_code=404, detail="App not found")
+
+    if app.web_port_source != "manual" and app.pid:
+        app_manager.supervisor._maybe_detect_web_port(app.id, app.pid)
+        db.refresh(app)
+
     return app
 
 

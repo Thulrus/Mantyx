@@ -13,6 +13,7 @@ from pathlib import Path
 import psutil
 
 from mantyx.config import get_settings
+from mantyx.core.port_detector import detect_listening_port
 from mantyx.core.venv_manager import VenvManager
 from mantyx.database import get_db
 from mantyx.logging import get_app_log_path, get_logger
@@ -148,6 +149,10 @@ class ProcessSupervisor:
                 execution_id=execution_id,
             )
 
+            # Best-effort immediate attempt; servers usually haven't bound their
+            # socket yet at this instant, so monitor_apps() keeps retrying below.
+            self._maybe_detect_web_port(app_id, process.pid)
+
             return execution
 
         except Exception as e:
@@ -225,6 +230,11 @@ class ProcessSupervisor:
             if app_obj:
                 app_obj.state = AppState.STOPPED
                 app_obj.pid = None
+                # Clear auto-detected ports so a restart re-detects (some apps bind
+                # a different port each run); never touch a user-set manual value.
+                if app_obj.web_port_source == "auto":
+                    app_obj.web_port = None
+                    app_obj.web_port_source = None
 
             # Close ALL running executions for this app — not just the first.
             # Orphaned RUNNING records accumulate if a previous _mark_stopped only
@@ -341,6 +351,28 @@ class ProcessSupervisor:
 
         self.start_app(app.id)
 
+    def _maybe_detect_web_port(self, app_id: int, pid: int | None) -> None:
+        """Try to auto-populate an app's web_port from its process's open sockets.
+
+        No-ops once a port has been found or the user has manually set/edited
+        web_url/web_port (App.web_port_source == "manual") — see api/apps.py's
+        update_app_config, which flips that flag on any manual edit.
+        """
+        if pid is None:
+            return
+
+        port = detect_listening_port(pid)
+        if port is None:
+            return
+
+        with get_db() as session:
+            app_obj = session.query(App).filter(App.id == app_id).first()
+            if app_obj is None or app_obj.web_port_source == "manual" or app_obj.web_port:
+                return
+            app_obj.web_port = port
+            app_obj.web_port_source = "auto"
+            logger.info(f"Auto-detected web port {port} for app {app_obj.name}", app_id=app_id)
+
     def check_app_running(self, app: App) -> bool:
         """Check if an app is actually running."""
         if not app.pid:
@@ -370,6 +402,9 @@ class ProcessSupervisor:
             )
 
             for app in running_apps:
+                if app.web_port_source != "manual" and not app.web_port:
+                    self._maybe_detect_web_port(app.id, app.pid)
+
                 if not self.check_app_running(app):
                     logger.warning(
                         f"App {app.name} is marked running but process not found",

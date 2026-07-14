@@ -89,6 +89,9 @@ class App(Base, TimestampMixin):
     # Web interface URL (if app provides one)
     web_url: Mapped[str | None] = mapped_column(String(255), nullable=True)
     web_port: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # "manual" once a user has set/edited web_url or web_port via the API;
+    # None/"auto" while the port monitor is still free to overwrite these fields.
+    web_port_source: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     # Runtime state (updated by supervisor)
     pid: Mapped[int | None] = mapped_column(Integer, nullable=True)
