@@ -166,6 +166,25 @@ class UploadResponse(BaseModel):
     message: str
 
 
+class TaskStartResponse(BaseModel):
+    """Returned immediately when a long-running operation is kicked off."""
+
+    task_id: str
+    message: str
+
+
+class TaskResponse(BaseModel):
+    """Progress/log snapshot for a background operation, for polling."""
+
+    task_id: str
+    name: str
+    status: str
+    logs: list[str]
+    log_count: int
+    error: str | None = None
+    result: dict | None = None
+
+
 # Update schemas
 class UpdateResponse(BaseModel):
     app_id: int

@@ -3,6 +3,8 @@ FastAPI routes for app management.
 """
 
 import shutil
+import threading
+from collections.abc import Callable
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.orm import Session
@@ -12,11 +14,12 @@ from mantyx.api.schemas import (
     AppStatusResponse,
     AppUpdate,
     GitUpdateCheckResponse,
-    UpdateResponse,
-    UploadResponse,
+    TaskResponse,
+    TaskStartResponse,
 )
 from mantyx.config import get_settings
 from mantyx.core.app_manager import AppManager
+from mantyx.core.tasks import task_manager
 from mantyx.database import get_db_session
 from mantyx.logging import get_logger
 from mantyx.models.app import App, AppState, AppType
@@ -29,6 +32,27 @@ router = APIRouter(prefix="/apps", tags=["apps"])
 def get_app_manager() -> AppManager:
     """Dependency to get app manager instance."""
     return AppManager()
+
+
+def _run_task_in_background(task_id: str, work: Callable[[], None]) -> None:
+    """Run `work` on a daemon thread, marking the task failed on unhandled errors."""
+
+    def _runner():
+        try:
+            work()
+        except Exception as e:
+            task_manager.fail(task_id, str(e))
+
+    threading.Thread(target=_runner, daemon=True).start()
+
+
+@router.get("/tasks/{task_id}", response_model=TaskResponse)
+def get_task(task_id: str, since: int = 0):
+    """Poll progress/logs for a background operation (upload, install, update)."""
+    task = task_manager.to_dict(task_id, since=since)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return task
 
 
 @router.get("", response_model=list[AppResponse])
@@ -56,7 +80,7 @@ def get_app(
     return app
 
 
-@router.post("/upload/zip", response_model=UploadResponse)
+@router.post("/upload/zip", response_model=TaskStartResponse)
 async def upload_zip(
     file: UploadFile = File(...),
     app_name: str = Form(...),
@@ -65,56 +89,47 @@ async def upload_zip(
     description: str | None = Form(None),
     app_manager: AppManager = Depends(get_app_manager),
 ):
-    """Upload and create an app from a ZIP file."""
+    """Upload and create an app from a ZIP file. Extraction runs in the background;
+    poll GET /apps/tasks/{task_id} for progress."""
     settings = get_settings()
 
-    # Save uploaded file
+    # Convert string to AppType enum up front so bad requests fail fast
+    try:
+        app_type_enum = AppType[app_type.upper()]
+    except KeyError:
+        raise HTTPException(status_code=400, detail=f"Invalid app_type: {app_type}")
+
+    # Save uploaded file (must happen in the request handler; the stream isn't
+    # available once we return)
     temp_path = settings.temp_dir / file.filename
     temp_path.parent.mkdir(parents=True, exist_ok=True)
+    with temp_path.open("wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
 
-    try:
-        with temp_path.open("wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+    task = task_manager.create(f"Uploading {app_name}")
+    on_log = task_manager.logger_for(task.id)
 
-        # Convert string to AppType enum
+    def work():
         try:
-            app_type_enum = AppType[app_type.upper()]
-        except KeyError:
-            raise HTTPException(status_code=400, detail=f"Invalid app_type: {app_type}")
-
-        # Create app
-        app = app_manager.create_app_from_zip(
-            temp_path,
-            app_name,
-            display_name,
-            description,
-            app_type_enum,
-        )
-
-        # Handle dict return (id and name)
-        if isinstance(app, dict):
-            return UploadResponse(
-                app_id=app["id"],
-                app_name=app["name"],
-                message="App uploaded successfully",
+            result = app_manager.create_app_from_zip(
+                temp_path,
+                app_name,
+                display_name,
+                description,
+                app_type_enum,
+                on_log=on_log,
             )
+            task_manager.complete(task.id, {"app_id": result["id"], "app_name": result["name"]})
+        finally:
+            if temp_path.exists():
+                temp_path.unlink()
 
-        # Fallback for App object (shouldn't happen with new code)
-        return UploadResponse(
-            app_id=app.id,
-            app_name=app.name,
-            message="App uploaded successfully",
-        )
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to upload app: {str(e)}")
-    finally:
-        if temp_path.exists():
-            temp_path.unlink()
+    _run_task_in_background(task.id, work)
+
+    return TaskStartResponse(task_id=task.id, message="Upload started")
 
 
-@router.post("/upload/git", response_model=UploadResponse)
+@router.post("/upload/git", response_model=TaskStartResponse)
 async def upload_git(
     git_url: str = Form(...),
     app_name: str = Form(...),
@@ -124,56 +139,57 @@ async def upload_git(
     description: str | None = Form(None),
     app_manager: AppManager = Depends(get_app_manager),
 ):
-    """Create an app from a Git repository."""
+    """Create an app from a Git repository. Clone runs in the background;
+    poll GET /apps/tasks/{task_id} for progress."""
     try:
-        # Convert string to AppType enum
-        try:
-            app_type_enum = AppType[app_type.upper()]
-        except KeyError:
-            raise HTTPException(status_code=400, detail=f"Invalid app_type: {app_type}")
+        app_type_enum = AppType[app_type.upper()]
+    except KeyError:
+        raise HTTPException(status_code=400, detail=f"Invalid app_type: {app_type}")
 
-        app = app_manager.create_app_from_git(
+    task = task_manager.create(f"Cloning {app_name} from Git")
+    on_log = task_manager.logger_for(task.id)
+
+    def work():
+        result = app_manager.create_app_from_git(
             git_url,
             app_name,
             display_name,
             branch,
             description,
             app_type_enum,
+            on_log=on_log,
         )
+        task_manager.complete(task.id, {"app_id": result["id"], "app_name": result["name"]})
 
-        # Handle dict return (id and name)
-        if isinstance(app, dict):
-            return UploadResponse(
-                app_id=app["id"],
-                app_name=app["name"],
-                message="App created from Git successfully",
-            )
+    _run_task_in_background(task.id, work)
 
-        # Fallback for App object (shouldn't happen with new code)
-        return UploadResponse(
-            app_id=app.id,
-            app_name=app.name,
-            message="App created from Git successfully",
-        )
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to create app from Git: {str(e)}")
+    return TaskStartResponse(task_id=task.id, message="Clone started")
 
 
-@router.post("/{app_id}/install")
+@router.post("/{app_id}/install", response_model=TaskStartResponse)
 def install_app(
     app_id: int,
     app_manager: AppManager = Depends(get_app_manager),
+    db: Session = Depends(get_db_session),
 ):
-    """Install an app's dependencies."""
-    try:
-        app_manager.install_app(app_id)
-        return {"message": "App installed successfully"}
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    """Install an app's dependencies. Runs in the background; poll
+    GET /apps/tasks/{task_id} for progress."""
+    app = db.query(App).filter(App.id == app_id).first()
+    if not app:
+        raise HTTPException(status_code=404, detail="App not found")
+    if app.state != AppState.UPLOADED:
+        raise HTTPException(status_code=400, detail=f"App {app.name} is not in uploaded state")
+
+    task = task_manager.create(f"Installing {app.name}")
+    on_log = task_manager.logger_for(task.id)
+
+    def work():
+        app_manager.install_app(app_id, on_log=on_log)
+        task_manager.complete(task.id, {"app_id": app_id})
+
+    _run_task_in_background(task.id, work)
+
+    return TaskStartResponse(task_id=task.id, message="Install started")
 
 
 @router.post("/{app_id}/enable")
@@ -263,81 +279,63 @@ def restart_app(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/{app_id}/update/zip", response_model=UpdateResponse)
+@router.post("/{app_id}/update/zip", response_model=TaskStartResponse)
 async def update_app_zip(
     app_id: int,
     file: UploadFile = File(...),
     backup: bool = Form(True),
     app_manager: AppManager = Depends(get_app_manager),
 ):
-    """Update an app from a ZIP file."""
+    """Update an app from a ZIP file. Runs in the background; poll
+    GET /apps/tasks/{task_id} for progress."""
     settings = get_settings()
 
     # Save uploaded file
     filename = file.filename or f"update_{app_id}.zip"
     temp_path = settings.temp_dir / filename
     temp_path.parent.mkdir(parents=True, exist_ok=True)
+    with temp_path.open("wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
 
-    try:
-        with temp_path.open("wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+    task = task_manager.create(f"Updating app {app_id}")
+    on_log = task_manager.logger_for(task.id)
 
-        # Update app
-        result = app_manager.update_app_from_zip(
-            app_id,
-            temp_path,
-            backup=backup,
-        )
+    def work():
+        try:
+            result = app_manager.update_app_from_zip(
+                app_id,
+                temp_path,
+                backup=backup,
+                on_log=on_log,
+            )
+            task_manager.complete(task.id, result)
+        finally:
+            if temp_path.exists():
+                temp_path.unlink()
 
-        return UpdateResponse(
-            app_id=result["app_id"],
-            app_name=result["app_name"],
-            old_version=result["old_version"],
-            new_version=result["new_version"],
-            backup_created=result["backup_created"],
-            message=f"App updated successfully from {result['old_version']} to {result['new_version']}",
-        )
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to update app: {str(e)}")
-    finally:
-        if temp_path.exists():
-            temp_path.unlink()
+    _run_task_in_background(task.id, work)
+
+    return TaskStartResponse(task_id=task.id, message="Update started")
 
 
-@router.post("/{app_id}/update/git", response_model=UpdateResponse)
+@router.post("/{app_id}/update/git", response_model=TaskStartResponse)
 def update_app_git(
     app_id: int,
     backup: bool = Form(True),
     app_manager: AppManager = Depends(get_app_manager),
 ):
-    """Pull latest changes from Git repository for an app."""
-    try:
-        result = app_manager.pull_git_app(app_id, backup=backup)
+    """Pull latest changes from Git repository for an app. Runs in the
+    background; poll GET /apps/tasks/{task_id} for progress."""
+    task = task_manager.create(f"Pulling Git updates for app {app_id}")
+    on_log = task_manager.logger_for(task.id)
 
-        if not result["changed"]:
-            message = "No changes detected, app is already up to date"
-        else:
-            message = (
-                f"App updated successfully from {result['old_version']} to {result['new_version']}"
-            )
+    def work():
+        result = app_manager.pull_git_app(app_id, backup=backup, on_log=on_log)
+        task_manager.complete(task.id, result)
 
-        return UpdateResponse(
-            app_id=result["app_id"],
-            app_name=result["app_name"],
-            old_version=result["old_version"],
-            new_version=result["new_version"],
-            changed=result["changed"],
-            backup_created=result["backup_created"],
-            old_commit=result.get("old_commit"),
-            new_commit=result.get("new_commit"),
-            message=message,
-        )
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to pull Git updates: {str(e)}")
+    _run_task_in_background(task.id, work)
+
+    return TaskStartResponse(task_id=task.id, message="Update started")
 
 
 @router.get("/{app_id}/check-git-update", response_model=GitUpdateCheckResponse)

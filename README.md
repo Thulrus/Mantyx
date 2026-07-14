@@ -274,52 +274,16 @@ Features:
 
 ---
 
-## Application Structure
+## Preparing an App for Deployment
 
-### Minimal App
+See [APP_PACKAGING.md](APP_PACKAGING.md) for the full guide to packaging an
+app for Mantyx — package structure, Perpetual vs. Scheduled entrypoints,
+persistent data storage, and the rules apps must follow. It's written to be
+easy for a human **or an AI coding agent** to follow when preparing an app
+for a Mantyx server.
 
-```
-myapp/
-└── main.py
-```
-
-### Complete App
-
-```
-myapp/
-├── main.py           # Entrypoint
-├── requirements.txt  # Dependencies
-├── config.yaml       # App config (optional)
-└── modules/
-    └── helper.py
-```
-
-### Example main.py
-
-```python
-#!/usr/bin/env python3
-"""
-Example Mantyx application.
-"""
-
-import sys
-import time
-
-def main():
-    print("Starting my application...")
-
-    # Your application logic here
-    while True:
-        print("Working...")
-        time.sleep(60)
-
-if __name__ == "__main__":
-    try:
-        main()
-    except KeyboardInterrupt:
-        print("Shutting down...")
-        sys.exit(0)
-```
+The same content is also available from the web UI via the **Deployment
+Guide** button in the header.
 
 ---
 

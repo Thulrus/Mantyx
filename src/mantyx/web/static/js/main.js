@@ -37,6 +37,11 @@ function initializeEventListeners() {
     openModal("uploadModal");
   });
 
+  // Deployment guide button
+  document.getElementById("deployGuideBtn").addEventListener("click", () => {
+    openModal("deployGuideModal");
+  });
+
   // Settings button
   document.getElementById("settingsBtn").addEventListener("click", () => {
     openSettingsModal();
@@ -177,6 +182,105 @@ function openModal(modalId) {
 function closeModal(modalId) {
   const modal = document.getElementById(modalId);
   modal.classList.remove("active");
+}
+
+// Progress Modal — shows live logs for long-running background operations
+// (uploads, installs, updates) so the UI doesn't look frozen while pip
+// installs or a git clone runs.
+let progressPollTimer = null;
+let progressLoggedCount = 0;
+
+function openProgressModal(title) {
+  progressLoggedCount = 0;
+  document.getElementById("progressModalTitle").textContent = title;
+  document.getElementById("progressLogOutput").textContent = "";
+  const spinner = document.getElementById("progressSpinner");
+  spinner.className = "spinner";
+  document.getElementById("progressStatusText").textContent = "Running...";
+  openModal("progressModal");
+}
+
+function appendProgressLogs(lines) {
+  if (!lines || lines.length === 0) return;
+  const output = document.getElementById("progressLogOutput");
+  output.textContent += (output.textContent ? "\n" : "") + lines.join("\n");
+  output.scrollTop = output.scrollHeight;
+}
+
+function setProgressFinished(status, message) {
+  const spinner = document.getElementById("progressSpinner");
+  spinner.className = `spinner done ${status}`;
+  document.getElementById("progressStatusText").textContent = message;
+}
+
+function stopProgressPolling() {
+  if (progressPollTimer) {
+    clearInterval(progressPollTimer);
+    progressPollTimer = null;
+  }
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  const dismissBtn = document.getElementById("progressModalDismiss");
+  if (dismissBtn) {
+    dismissBtn.addEventListener("click", () => {
+      closeModal("progressModal");
+      stopProgressPolling();
+    });
+  }
+});
+
+/**
+ * Start a background task, show a progress modal with live log tailing, and
+ * resolve once the task finishes.
+ *
+ * @param {string} title - shown in the modal header
+ * @param {() => Promise<{task_id: string}>} startTask - kicks off the backend task
+ * @param {string} successMessage - shown when the task completes
+ * @returns {Promise<object>} the task's `result` payload on success
+ */
+function runWithProgress(title, startTask, successMessage) {
+  return new Promise((resolve, reject) => {
+    openProgressModal(title);
+
+    startTask()
+      .then((startResponse) => {
+        const taskId = startResponse.task_id;
+        stopProgressPolling();
+
+        progressPollTimer = setInterval(async () => {
+          try {
+            const res = await fetch(
+              `${API_BASE}/apps/tasks/${taskId}?since=${progressLoggedCount}`,
+            );
+            if (!res.ok) {
+              throw new Error(`Failed to fetch task status (${res.status})`);
+            }
+            const task = await res.json();
+            appendProgressLogs(task.logs);
+            progressLoggedCount = task.log_count;
+
+            if (task.status === "success") {
+              stopProgressPolling();
+              setProgressFinished("success", successMessage);
+              resolve(task.result || {});
+            } else if (task.status === "failed") {
+              stopProgressPolling();
+              setProgressFinished("failed", `Failed: ${task.error}`);
+              reject(new Error(task.error || "Task failed"));
+            }
+          } catch (error) {
+            stopProgressPolling();
+            setProgressFinished("failed", `Failed: ${error.message}`);
+            reject(error);
+          }
+        }, 800);
+      })
+      .catch((error) => {
+        setProgressFinished("failed", `Failed: ${error.message}`);
+        reject(error);
+      });
+  });
 }
 
 function switchTab(tabName) {
@@ -544,14 +648,27 @@ function updateStats() {
 
 // App Actions
 async function installApp(appId) {
-  if (confirm("Install dependencies for this app?")) {
-    try {
-      await apiCall(`/apps/${appId}/install`, { method: "POST" });
-      alert("App installed successfully");
-      loadApps();
-    } catch (error) {
-      // Error already handled in apiCall
-    }
+  if (!confirm("Install dependencies for this app?")) return;
+
+  try {
+    await runWithProgress(
+      "Installing app...",
+      () =>
+        fetch(`${API_BASE}/apps/${appId}/install`, { method: "POST" }).then(
+          async (res) => {
+            if (!res.ok) {
+              const error = await res.json();
+              throw new Error(error.detail || "Install failed to start");
+            }
+            return res.json();
+          },
+        ),
+      "App installed successfully",
+    );
+    loadApps();
+  } catch (error) {
+    // Progress modal already shows the failure; just refresh state.
+    loadApps();
   }
 }
 
@@ -669,26 +786,28 @@ async function handleZipUpdate(e) {
 
   const formData = new FormData(e.target);
   const appId = document.getElementById("updateAppId").value;
+  closeModal("updateModal");
 
   try {
-    const response = await fetch(`${API_BASE}/apps/${appId}/update/zip`, {
-      method: "POST",
-      body: formData,
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.detail || "Update failed");
-    }
-
-    const result = await response.json();
-
-    alert(result.message || "App updated successfully!");
-    closeModal("updateModal");
+    await runWithProgress(
+      "Updating app...",
+      () =>
+        fetch(`${API_BASE}/apps/${appId}/update/zip`, {
+          method: "POST",
+          body: formData,
+        }).then(async (res) => {
+          if (!res.ok) {
+            const error = await res.json();
+            throw new Error(error.detail || "Update failed to start");
+          }
+          return res.json();
+        }),
+      "App updated successfully!",
+    );
     e.target.reset();
     loadApps();
   } catch (error) {
-    alert(`Update failed: ${error.message}`);
+    loadApps();
   }
 }
 
@@ -697,29 +816,31 @@ async function handleGitUpdate(e) {
 
   const appId = document.getElementById("updateGitAppId").value;
   const backup = document.getElementById("updateGitBackup").checked;
+  closeModal("updateModal");
 
   try {
     const formData = new FormData();
     formData.append("backup", backup);
 
-    const response = await fetch(`${API_BASE}/apps/${appId}/update/git`, {
-      method: "POST",
-      body: formData,
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.detail || "Update failed");
-    }
-
-    const result = await response.json();
-
-    alert(result.message || "App updated successfully!");
-    closeModal("updateModal");
+    await runWithProgress(
+      "Updating app...",
+      () =>
+        fetch(`${API_BASE}/apps/${appId}/update/git`, {
+          method: "POST",
+          body: formData,
+        }).then(async (res) => {
+          if (!res.ok) {
+            const error = await res.json();
+            throw new Error(error.detail || "Update failed to start");
+          }
+          return res.json();
+        }),
+      "App updated successfully!",
+    );
     e.target.reset();
     loadApps();
   } catch (error) {
-    alert(`Update failed: ${error.message}`);
+    loadApps();
   }
 }
 
@@ -734,25 +855,27 @@ async function pullGitUpdate(appId, remoteCommitShort) {
     const formData = new FormData();
     formData.append("backup", "true");
 
-    const response = await fetch(`${API_BASE}/apps/${appId}/update/git`, {
-      method: "POST",
-      body: formData,
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.detail || "Update failed");
-    }
-
-    const result = await response.json();
+    await runWithProgress(
+      "Pulling Git updates...",
+      () =>
+        fetch(`${API_BASE}/apps/${appId}/update/git`, {
+          method: "POST",
+          body: formData,
+        }).then(async (res) => {
+          if (!res.ok) {
+            const error = await res.json();
+            throw new Error(error.detail || "Update failed to start");
+          }
+          return res.json();
+        }),
+      "App updated successfully!",
+    );
 
     // Invalidate the cache entry so next load re-checks the remote
     delete gitUpdateCache[appId];
-
-    alert(result.message || "App updated successfully!");
     loadApps();
   } catch (error) {
-    alert(`Pull failed: ${error.message}`);
+    loadApps();
   }
 }
 
@@ -761,19 +884,24 @@ async function handleZipUpload(e) {
   e.preventDefault();
 
   const formData = new FormData(e.target);
+  closeModal("uploadModal");
 
   try {
-    const response = await fetch(`${API_BASE}/apps/upload/zip`, {
-      method: "POST",
-      body: formData,
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.detail || "Upload failed");
-    }
-
-    const result = await response.json();
+    const result = await runWithProgress(
+      "Uploading app...",
+      () =>
+        fetch(`${API_BASE}/apps/upload/zip`, {
+          method: "POST",
+          body: formData,
+        }).then(async (res) => {
+          if (!res.ok) {
+            const error = await res.json();
+            throw new Error(error.detail || "Upload failed to start");
+          }
+          return res.json();
+        }),
+      "App uploaded successfully! Install it to continue.",
+    );
 
     // If it's a scheduled app and schedule info was provided, create the schedule
     const appType = formData.get("app_type");
@@ -781,12 +909,10 @@ async function handleZipUpload(e) {
       await createScheduleFromUpload(result.app_id, formData, "zip");
     }
 
-    alert(`App uploaded successfully! Install it to continue.`);
-    closeModal("uploadModal");
     e.target.reset();
     loadApps();
   } catch (error) {
-    alert(`Upload failed: ${error.message}`);
+    loadApps();
   }
 }
 
@@ -794,19 +920,24 @@ async function handleGitUpload(e) {
   e.preventDefault();
 
   const formData = new FormData(e.target);
+  closeModal("uploadModal");
 
   try {
-    const response = await fetch(`${API_BASE}/apps/upload/git`, {
-      method: "POST",
-      body: formData,
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.detail || "Upload failed");
-    }
-
-    const result = await response.json();
+    const result = await runWithProgress(
+      "Cloning repository...",
+      () =>
+        fetch(`${API_BASE}/apps/upload/git`, {
+          method: "POST",
+          body: formData,
+        }).then(async (res) => {
+          if (!res.ok) {
+            const error = await res.json();
+            throw new Error(error.detail || "Clone failed to start");
+          }
+          return res.json();
+        }),
+      "App created from Git successfully! Install it to continue.",
+    );
 
     // If it's a scheduled app and schedule info was provided, create the schedule
     const appType = formData.get("app_type");
@@ -814,12 +945,10 @@ async function handleGitUpload(e) {
       await createScheduleFromUpload(result.app_id, formData, "git");
     }
 
-    alert(`App created from Git successfully! Install it to continue.`);
-    closeModal("uploadModal");
     e.target.reset();
     loadApps();
   } catch (error) {
-    alert(`Upload failed: ${error.message}`);
+    loadApps();
   }
 }
 

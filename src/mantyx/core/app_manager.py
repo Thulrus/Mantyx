@@ -6,11 +6,12 @@ Coordinates uploads, installations, updates, and deletions.
 
 import shutil
 import zipfile
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from git import Repo
+from git import RemoteProgress, Repo
 from git import exc as git_exc
 
 from mantyx.config import get_settings
@@ -21,7 +22,22 @@ from mantyx.database import get_db
 from mantyx.logging import get_logger
 from mantyx.models.app import App, AppState, AppType
 
+LogCallback = Callable[[str], None]
+
 logger = get_logger("app_manager")
+
+
+class _GitLogProgress(RemoteProgress):
+    """Forwards GitPython clone/pull progress lines to a log callback."""
+
+    def __init__(self, on_log: LogCallback):
+        super().__init__()
+        self._on_log = on_log
+
+    def update(self, op_code, cur_count, max_count=None, message=""):
+        line = self._cur_line
+        if line:
+            self._on_log(line)
 
 
 class AppManager:
@@ -65,9 +81,12 @@ class AppManager:
         display_name: str,
         description: str | None = None,
         app_type: AppType = AppType.PERPETUAL,
+        on_log: LogCallback | None = None,
     ) -> dict[str, int | str]:
         """Create an app from a ZIP archive."""
         logger.info(f"Creating app {app_name} from ZIP: {zip_path}")
+        if on_log:
+            on_log(f"Validating upload for {app_name}...")
 
         self._validate_upload(zip_path)
 
@@ -88,6 +107,9 @@ class AppManager:
             # Extract ZIP
             source_dir.mkdir(parents=True, exist_ok=True)
 
+            if on_log:
+                on_log(f"Extracting {zip_path.name}...")
+
             with zipfile.ZipFile(zip_path, "r") as zip_ref:
                 # Security: check for path traversal
                 for member in zip_ref.namelist():
@@ -97,6 +119,8 @@ class AppManager:
                 zip_ref.extractall(source_dir)
 
             logger.info(f"Extracted ZIP to {source_dir}")
+            if on_log:
+                on_log("Extraction complete.")
 
             # Detect entrypoint
             entrypoint = self._detect_entrypoint(source_dir)
@@ -121,6 +145,8 @@ class AppManager:
                 app_name = app.name
 
             logger.info(f"Created app {app_name} with ID {app_id}", app_id=app_id)
+            if on_log:
+                on_log(f"App {app_name} created.")
 
             # Return the values as a simple dict to avoid session issues
             return {"id": app_id, "name": app_name}
@@ -130,6 +156,8 @@ class AppManager:
             if app_dir.exists():
                 shutil.rmtree(app_dir)
             logger.error(f"Failed to create app from ZIP: {e}")
+            if on_log:
+                on_log(f"Failed: {e}")
             raise
 
     def create_app_from_git(
@@ -140,9 +168,12 @@ class AppManager:
         branch: str = "main",
         description: str | None = None,
         app_type: AppType = AppType.PERPETUAL,
+        on_log: LogCallback | None = None,
     ) -> dict[str, int | str]:
         """Create an app from a Git repository."""
         logger.info(f"Creating app {app_name} from Git: {git_url}")
+        if on_log:
+            on_log(f"Cloning {git_url} (branch {branch})...")
 
         # Check if app already exists
         with get_db() as session:
@@ -159,10 +190,13 @@ class AppManager:
         try:
             # Clone repository
             source_dir.mkdir(parents=True, exist_ok=True)
-            repo = Repo.clone_from(git_url, source_dir, branch=branch)
+            progress = _GitLogProgress(on_log) if on_log else None
+            repo = Repo.clone_from(git_url, source_dir, branch=branch, progress=progress)
 
             commit_hash = repo.head.commit.hexsha
             logger.info(f"Cloned {git_url} @ {commit_hash}")
+            if on_log:
+                on_log(f"Cloned at commit {commit_hash[:8]}.")
 
             # Detect entrypoint
             entrypoint = self._detect_entrypoint(source_dir)
@@ -190,6 +224,8 @@ class AppManager:
                 app_name = app.name
 
             logger.info(f"Created app {app_name} from Git", app_id=app_id)
+            if on_log:
+                on_log(f"App {app_name} created.")
 
             # Return the values as a simple dict to avoid session issues
             return {"id": app_id, "name": app_name}
@@ -199,6 +235,8 @@ class AppManager:
             if self._get_app_dir(app_name).exists():
                 shutil.rmtree(self._get_app_dir(app_name))
             logger.error(f"Failed to create app from Git: {e}")
+            if on_log:
+                on_log(f"Failed: {e}")
             raise
 
     def _detect_entrypoint(self, source_dir: Path) -> str:
@@ -217,7 +255,7 @@ class AppManager:
 
         raise ValueError("No Python entrypoint found in app")
 
-    def install_app(self, app_id: int) -> None:
+    def install_app(self, app_id: int, on_log: LogCallback | None = None) -> None:
         """Install an app's dependencies."""
         with get_db() as session:
             app = session.query(App).filter(App.id == app_id).first()
@@ -230,7 +268,7 @@ class AppManager:
             logger.info(f"Installing app {app.name}", app_id=app.id)
 
             # Create virtual environment
-            self.venv_manager.create(app.name)
+            self.venv_manager.create(app.name, on_log=on_log)
 
             # Check for requirements
             source_dir = self._get_app_source_dir(app.name)
@@ -238,9 +276,11 @@ class AppManager:
 
             if requirements_file.exists():
                 logger.info(f"Installing requirements for {app.name}", app_id=app.id)
-                self.venv_manager.install_requirements(app.name, requirements_file)
+                self.venv_manager.install_requirements(app.name, requirements_file, on_log=on_log)
             else:
                 logger.info(f"No requirements.txt found for {app.name}", app_id=app.id)
+                if on_log:
+                    on_log("No requirements.txt found, skipping dependency install.")
 
             # Create persistent data directory (survives upgrades, injected as APP_DATA_DIR)
             data_dir = self._get_app_dir(app.name) / "data"
@@ -251,6 +291,8 @@ class AppManager:
             session.add(app)
 
             logger.info(f"App {app.name} installed successfully", app_id=app.id)
+            if on_log:
+                on_log(f"App {app.name} installed successfully.")
 
     def enable_app(self, app_id: int) -> None:
         """Enable an app."""
@@ -364,6 +406,7 @@ class AppManager:
         app_id: int,
         zip_path: Path,
         backup: bool = True,
+        on_log: LogCallback | None = None,
     ) -> dict[str, Any]:
         """Update an app from a ZIP archive while preserving configuration."""
         logger.info(f"Updating app {app_id} from ZIP: {zip_path}")
@@ -401,6 +444,9 @@ class AppManager:
             # Extract new source to temp directory
             temp_dir.mkdir(parents=True, exist_ok=True)
 
+            if on_log:
+                on_log(f"Extracting {zip_path.name}...")
+
             with zipfile.ZipFile(zip_path, "r") as zip_ref:
                 # Security: check for path traversal
                 for member in zip_ref.namelist():
@@ -420,9 +466,11 @@ class AppManager:
             requirements_file = source_dir / "requirements.txt"
             if requirements_file.exists():
                 logger.info(f"Reinstalling dependencies for {app_name}")
-                self.venv_manager.install_requirements(app_name, requirements_file)
+                self.venv_manager.install_requirements(app_name, requirements_file, on_log=on_log)
             else:
                 logger.info(f"No requirements.txt found for {app_name}")
+                if on_log:
+                    on_log("No requirements.txt found, skipping dependency install.")
 
             # Update app record
             with get_db() as session:
@@ -470,7 +518,9 @@ class AppManager:
             if temp_dir.exists():
                 shutil.rmtree(temp_dir)
 
-    def pull_git_app(self, app_id: int, backup: bool = True) -> dict[str, Any]:
+    def pull_git_app(
+        self, app_id: int, backup: bool = True, on_log: LogCallback | None = None
+    ) -> dict[str, Any]:
         """Pull latest changes from Git repository for an app."""
         logger.info(f"Pulling Git updates for app {app_id}")
 
@@ -508,9 +558,12 @@ class AppManager:
 
         try:
             # Open the existing repo and pull
+            if on_log:
+                on_log(f"Pulling {git_branch} from {git_url}...")
             repo = Repo(source_dir)
             origin = repo.remotes.origin
-            origin.pull(git_branch)
+            progress = _GitLogProgress(on_log) if on_log else None
+            origin.pull(git_branch, progress=progress)
 
             new_commit = repo.head.commit.hexsha
 
@@ -537,7 +590,7 @@ class AppManager:
             requirements_file = source_dir / "requirements.txt"
             if requirements_file.exists():
                 logger.info(f"Reinstalling dependencies for {app_name}")
-                self.venv_manager.install_requirements(app_name, requirements_file)
+                self.venv_manager.install_requirements(app_name, requirements_file, on_log=on_log)
 
             # Detect entrypoint in case it changed
             new_entrypoint = self._detect_entrypoint(source_dir)

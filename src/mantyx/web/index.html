@@ -19,6 +19,9 @@
             <button id="uploadBtn" class="btn btn-primary">
               <span>📤</span> Upload App
             </button>
+            <button id="deployGuideBtn" class="btn btn-secondary">
+              <span>📘</span> Deployment Guide
+            </button>
             <button id="settingsBtn" class="btn btn-secondary">
               <span>⚙️</span> Settings
             </button>
@@ -629,6 +632,111 @@ data_dir.mkdir(parents=True, exist_ok=True)</pre
       </div>
     </div>
 
+    <!-- Deployment Guide Modal -->
+    <div id="deployGuideModal" class="modal">
+      <div class="modal-content modal-large guide-content">
+        <span class="close">&times;</span>
+        <h2>Preparing an App for Mantyx</h2>
+        <p class="info-text">
+          Mantyx runs Python apps in isolated virtual environments, either as
+          persistent background processes (<strong>Perpetual</strong>) or on
+          a schedule (<strong>Scheduled</strong>). This guide covers exactly
+          what an app needs to be deployable — useful whether you're
+          packaging it by hand or asking an AI agent to do it for you.
+        </p>
+
+        <h3>1. Package Structure</h3>
+        <p>Package your app as a ZIP file (or a Git repo) with this layout:</p>
+        <pre><code>your-app-name.zip
+├── main.py          &lt;- required entrypoint (or app.py, run.py, etc.)
+└── requirements.txt &lt;- optional, list pip dependencies here</code></pre>
+        <p>
+          Additional files/modules are fine — <code>main.py</code> is just
+          the entrypoint Mantyx executes.
+        </p>
+
+        <h3>2. Choose an App Type</h3>
+        <p><strong>Perpetual</strong> — a long-running process. The
+        entrypoint must run a loop and handle
+        <code>KeyboardInterrupt</code> for clean shutdown:</p>
+        <pre><code>import sys
+import time
+
+def main():
+    while True:
+        # do work
+        time.sleep(10)
+
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        sys.exit(0)</code></pre>
+
+        <p><strong>Scheduled</strong> — runs on a cron or interval schedule,
+        does its work, then exits (<code>0</code> for success,
+        <code>1</code> for failure):</p>
+        <pre><code>import sys
+
+def main():
+    # do work
+    sys.exit(0)
+
+if __name__ == "__main__":
+    main()</code></pre>
+
+        <h3>3. Persistent Data (optional)</h3>
+        <div class="alert alert-info">
+          Mantyx injects an <code>APP_DATA_DIR</code> environment variable
+          pointing to a directory that persists across updates. Use it for
+          any runtime data your app needs to keep:
+          <pre style="margin: 0.5rem 0 0">
+import os
+from pathlib import Path
+
+data_dir = Path(os.environ.get("APP_DATA_DIR", "./data"))
+data_dir.mkdir(parents=True, exist_ok=True)</pre
+          >
+          <small style="display: block; margin-top: 0.5rem"
+            >⚠️ This directory is only removed when the app itself is
+            deleted — updates leave it untouched.</small
+          >
+        </div>
+
+        <h3>4. Rules</h3>
+        <ul>
+          <li>All stdout/stderr is captured and logged automatically</li>
+          <li>No Mantyx-specific imports or SDK required — plain Python</li>
+          <li>
+            List third-party dependencies in <code>requirements.txt</code>;
+            standard library modules need no entry
+          </li>
+          <li>
+            Each app gets its own isolated virtual environment, so
+            dependencies never conflict between apps
+          </li>
+        </ul>
+
+        <h3>5. Deploy It</h3>
+        <p>Upload the ZIP (or point at a Git repo) via the
+        <strong>Upload App</strong> button above, or via the API:</p>
+        <pre><code>curl -X POST http://localhost:8420/api/apps/upload/zip \
+  -F "file=@myapp.zip" \
+  -F "app_name=my-app" \
+  -F "display_name=My Application"</code></pre>
+        <p>
+          Then install its dependencies, enable it, and (for perpetual apps)
+          start it — or attach a schedule for scheduled apps.
+        </p>
+
+        <p class="info-text">
+          The full version of this guide, kept in sync with this modal, lives
+          in
+          <code>APP_PACKAGING.md</code> at the root of the Mantyx repository.
+        </p>
+      </div>
+    </div>
+
     <!-- App Details Modal -->
     <div id="appDetailsModal" class="modal">
       <div class="modal-content modal-large">
@@ -1008,6 +1116,28 @@ data_dir.mkdir(parents=True, exist_ok=True)</pre
       </div>
     </div>
 
-    <script src="/static/js/main.js?v=6"></script>
+    <!-- Progress Modal (upload / install / update progress) -->
+    <div id="progressModal" class="modal">
+      <div class="modal-content modal-large">
+        <span class="close" id="progressModalClose">&times;</span>
+        <h2 id="progressModalTitle">Working...</h2>
+        <div class="progress-status">
+          <span id="progressSpinner" class="spinner"></span>
+          <span id="progressStatusText">Running...</span>
+        </div>
+        <pre id="progressLogOutput" class="log-output progress-log"></pre>
+        <div class="form-actions">
+          <button
+            type="button"
+            id="progressModalDismiss"
+            class="btn btn-secondary"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <script src="/static/js/main.js?v=8"></script>
   </body>
 </html>
