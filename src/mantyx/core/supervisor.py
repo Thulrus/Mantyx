@@ -16,7 +16,7 @@ from mantyx.config import get_settings
 from mantyx.core.venv_manager import VenvManager
 from mantyx.database import get_db
 from mantyx.logging import get_app_log_path, get_logger
-from mantyx.models.app import App, AppState
+from mantyx.models.app import App, AppState, AppType
 from mantyx.models.execution import Execution, ExecutionStatus
 
 logger = get_logger("supervisor")
@@ -274,6 +274,36 @@ class ProcessSupervisor:
                 app_obj.last_restart_at = datetime.now()
 
         return self.start_app(app_id)
+
+    def adopt_running_apps(self) -> None:
+        """Adopt or start every perpetual app that should be running.
+
+        Finds all non-deleted perpetual apps left in RUNNING, ENABLED, or
+        FAILED state (e.g. from before a restart) and adopts each one via
+        adopt_app(). Used both at server startup and after a backup restore.
+        """
+        with get_db() as session:
+            perpetual_apps = (
+                session.query(App)
+                .filter(
+                    App.app_type == AppType.PERPETUAL,
+                    App.state.in_([AppState.RUNNING, AppState.ENABLED, AppState.FAILED]),
+                    App.is_deleted == False,  # noqa: E712
+                )
+                .all()
+            )
+            # Detach from session before iterating (avoids DetachedInstanceError)
+            session.expunge_all()
+
+        for app in perpetual_apps:
+            try:
+                self.adopt_app(app)
+                logger.info(f"Auto-started perpetual app: {app.name}", app_id=app.id)
+            except Exception as e:
+                logger.error(
+                    f"Failed to auto-start perpetual app: {app.name}: {e}",
+                    app_id=app.id,
+                )
 
     def adopt_app(self, app: App) -> None:
         """Re-adopt an orphaned perpetual app process, or start fresh if the process is gone.

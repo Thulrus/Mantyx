@@ -47,6 +47,23 @@ def init_db() -> None:
     Base.metadata.create_all(bind=_engine)
 
 
+def dispose_engine() -> None:
+    """Dispose of the current engine and drop the session factory.
+
+    Used before replacing the underlying SQLite file (e.g. during a backup
+    restore) so no pooled connection keeps the old file open or locked.
+    The next call to get_engine()/get_db() will lazily re-initialize against
+    whatever file is at the configured path.
+    """
+    global _engine, _SessionLocal
+
+    if _engine is not None:
+        _engine.dispose()
+
+    _engine = None
+    _SessionLocal = None
+
+
 def get_engine() -> Engine:
     """Get the database engine."""
     if _engine is None:

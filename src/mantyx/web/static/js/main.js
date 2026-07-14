@@ -263,7 +263,7 @@ function runWithProgress(title, startTask, successMessage) {
             if (task.status === "success") {
               stopProgressPolling();
               setProgressFinished("success", successMessage);
-              resolve(task.result || {});
+              resolve({ ...(task.result || {}), task_id: taskId });
             } else if (task.status === "failed") {
               stopProgressPolling();
               setProgressFinished("failed", `Failed: ${task.error}`);
@@ -1472,6 +1472,74 @@ async function handleSettingsSubmit(e) {
     loadSystemInfo();
   } catch (error) {
     // Error already handled in apiCall
+  }
+}
+
+// Backup & Restore
+async function exportBackup() {
+  try {
+    const result = await runWithProgress(
+      "Creating backup...",
+      () =>
+        fetch(`${API_BASE}/backup/export`, { method: "POST" }).then(
+          async (res) => {
+            if (!res.ok) {
+              const error = await res.json();
+              throw new Error(error.detail || "Backup failed to start");
+            }
+            return res.json();
+          },
+        ),
+      "Backup created successfully!",
+    );
+
+    // Trigger the browser download of the finished archive
+    window.location.href = `${API_BASE}/backup/export/${result.task_id}/download`;
+  } catch (error) {
+    // Error already surfaced by the progress modal
+  }
+}
+
+async function importBackup() {
+  const fileInput = document.getElementById("restoreFileInput");
+  const file = fileInput.files[0];
+  if (!file) {
+    alert("Choose a backup file first.");
+    return;
+  }
+
+  const confirmed = confirm(
+    "This will stop every app and permanently replace the current database " +
+      "and app files with the contents of this backup. This cannot be undone. " +
+      "Continue?",
+  );
+  if (!confirmed) return;
+
+  const formData = new FormData();
+  formData.append("file", file);
+
+  try {
+    await runWithProgress(
+      "Restoring backup...",
+      () =>
+        fetch(`${API_BASE}/backup/import`, {
+          method: "POST",
+          body: formData,
+        }).then(async (res) => {
+          if (!res.ok) {
+            const error = await res.json();
+            throw new Error(error.detail || "Restore failed to start");
+          }
+          return res.json();
+        }),
+      "Backup restored successfully! Reloading...",
+    );
+
+    fileInput.value = "";
+    closeModal("settingsModal");
+    setTimeout(() => window.location.reload(), 1000);
+  } catch (error) {
+    // Error already surfaced by the progress modal
   }
 }
 

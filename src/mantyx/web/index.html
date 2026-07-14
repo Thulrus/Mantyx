@@ -980,6 +980,46 @@ data_dir.mkdir(parents=True, exist_ok=True)</pre
             </button>
           </div>
         </form>
+
+        <hr />
+
+        <h3>Backup &amp; Restore</h3>
+        <div class="form-group">
+          <label>Export a full backup</label>
+          <small>
+            Downloads a single archive containing every app, its data, and
+            all schedules/settings. Virtual environments are not included;
+            they're rebuilt from each app's requirements.txt on import.
+          </small>
+          <div class="form-actions">
+            <button
+              type="button"
+              class="btn btn-secondary"
+              onclick="exportBackup()"
+            >
+              Export Backup
+            </button>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="restoreFileInput">Import a backup</label>
+          <small>
+            <strong>Warning:</strong> this stops every app and replaces the
+            current database and app files with the backup's contents. This
+            cannot be undone.
+          </small>
+          <input type="file" id="restoreFileInput" accept=".zip" />
+          <div class="form-actions">
+            <button
+              type="button"
+              class="btn btn-danger"
+              onclick="importBackup()"
+            >
+              Import Backup...
+            </button>
+          </div>
+        </div>
       </div>
     </div>
 

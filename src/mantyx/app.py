@@ -11,13 +11,12 @@ from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
-from mantyx.api import apps, executions, schedules, settings
+from mantyx.api import apps, backup, executions, schedules, settings
 from mantyx.config import get_settings
 from mantyx.core.scheduler import AppScheduler
 from mantyx.core.supervisor import ProcessSupervisor
-from mantyx.database import get_db, init_db
+from mantyx.database import init_db
 from mantyx.logging import get_logger
-from mantyx.models.app import App, AppState, AppType
 
 logger = get_logger("main")
 
@@ -51,30 +50,7 @@ async def lifespan(app: FastAPI):
     logger.info("Supervisor initialized")
 
     # Auto-start perpetual apps that were running or enabled before shutdown
-    with get_db() as session:
-        perpetual_apps = (
-            session.query(App)
-            .filter(
-                App.app_type == AppType.PERPETUAL,
-                App.state.in_([AppState.RUNNING, AppState.ENABLED, AppState.FAILED]),
-                App.is_deleted == False,  # noqa: E712
-            )
-            .all()
-        )
-        # Detach from session before iterating (avoids DetachedInstanceError)
-        session.expunge_all()
-
-    for perpetual_app in perpetual_apps:
-        try:
-            supervisor.adopt_app(perpetual_app)
-            logger.info(
-                f"Auto-started perpetual app: {perpetual_app.name}", app_id=perpetual_app.id
-            )
-        except Exception as e:
-            logger.error(
-                f"Failed to auto-start perpetual app: {perpetual_app.name}: {e}",
-                app_id=perpetual_app.id,
-            )
+    supervisor.adopt_running_apps()
 
     # Register signal handlers.
     # IMPORTANT: do NOT call sys.exit() inside a signal handler that fires while
@@ -129,6 +105,7 @@ app.include_router(apps.router, prefix="/api")
 app.include_router(executions.router, prefix="/api")
 app.include_router(schedules.router, prefix="/api")
 app.include_router(settings.router, prefix="/api")
+app.include_router(backup.router, prefix="/api")
 
 # Serve static files (web UI)
 static_dir = Path(__file__).parent / "web" / "static"
