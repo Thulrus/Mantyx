@@ -6,29 +6,43 @@ This directory contains utility scripts for Mantyx development.
 
 ### setup-dev.sh
 
-**Purpose:** Complete development environment setup
+**Purpose:** Set up the development environment, or repair it if anything is wrong
 
-Sets up everything needed for Mantyx development:
+Runs automatically when the folder is opened in VS Code (task "Mantyx: Setup
+Development Environment") and is safe to run any time:
 
 - ✅ Checks Python version (3.10+)
-- ✅ Creates/verifies virtual environment
+- ✅ Checks `.venv` health and **rebuilds it automatically** if it's broken
 - ✅ Installs all dependencies
-- ✅ Installs and configures pre-commit hooks
+- ✅ Installs pre-commit hooks (rewriting a stale git hook if needed)
 - ✅ Creates development directories
-- ✅ Optionally runs pre-commit on all files
-- ✅ Verifies setup with test run
+- ✅ Verifies setup with a test run
+
+A `.venv` counts as broken when:
+
+- `bin/python` points at a Python that no longer exists, or at a different
+  version than the venv was built for (e.g. after an OS upgrade from 3.12 to 3.14)
+- the venv or project directory was moved, so `bin/pip` and other console
+  scripts point at the old location
+- pip doesn't work inside it
 
 **Usage:**
 
 ```bash
-./scripts/setup-dev.sh
+./scripts/setup-dev.sh               # set up / repair
+./scripts/setup-dev.sh --recreate    # rebuild .venv from scratch regardless
+./scripts/setup-dev.sh --all-hooks   # also run every pre-commit hook on all files
+PYTHON=python3.12 ./scripts/setup-dev.sh --recreate   # build with a specific Python
 ```
+
+The VS Code task "Mantyx: Rebuild Development Environment (from scratch)" runs
+it with `--recreate`.
 
 **When to use:**
 
 - First time setting up the project
 - After pulling major changes
-- When environment seems broken
+- When environment seems broken (including after an OS Python upgrade)
 - Setting up on a new machine
 
 ### check-env.sh
@@ -38,10 +52,10 @@ Sets up everything needed for Mantyx development:
 Verifies that your development environment is properly configured:
 
 - ✅ Python version check
-- ✅ Virtual environment exists and works
+- ✅ Virtual environment is healthy (same checks setup-dev.sh uses)
 - ✅ Mantyx package installed
 - ✅ Development tools available (pytest, black, ruff, pre-commit)
-- ✅ Pre-commit hooks installed
+- ✅ Pre-commit hooks installed and pointing at this venv
 - ✅ Development directories present
 - ✅ Configuration files exist
 - ✅ Tests discoverable

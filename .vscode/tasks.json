@@ -16,6 +16,20 @@
             }
         },
         {
+            "label": "Mantyx: Rebuild Development Environment (from scratch)",
+            "type": "shell",
+            "command": "${workspaceFolder}/scripts/setup-dev.sh",
+            "args": [
+                "--recreate"
+            ],
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated",
+                "focus": true
+            }
+        },
+        {
             "label": "Mantyx: Check Environment",
             "type": "shell",
             "command": "${workspaceFolder}/scripts/check-env.sh",
@@ -57,8 +71,10 @@
         {
             "label": "Mantyx: Install Dependencies",
             "type": "shell",
-            "command": "${workspaceFolder}/.venv/bin/pip",
+            "command": "${workspaceFolder}/.venv/bin/python",
             "args": [
+                "-m",
+                "pip",
                 "install",
                 "-e",
                 ".[dev]"
@@ -96,8 +112,10 @@
         {
             "label": "Mantyx: Format Code",
             "type": "shell",
-            "command": "${workspaceFolder}/.venv/bin/black",
+            "command": "${workspaceFolder}/.venv/bin/python",
             "args": [
+                "-m",
+                "black",
                 "src/mantyx",
                 "examples"
             ],
@@ -110,8 +128,10 @@
         {
             "label": "Mantyx: Run Pre-commit",
             "type": "shell",
-            "command": "${workspaceFolder}/.venv/bin/pre-commit",
+            "command": "${workspaceFolder}/.venv/bin/python",
             "args": [
+                "-m",
+                "pre_commit",
                 "run",
                 "--all-files"
             ],
@@ -124,8 +144,10 @@
         {
             "label": "Mantyx: Run Tests",
             "type": "shell",
-            "command": "${workspaceFolder}/.venv/bin/pytest",
+            "command": "${workspaceFolder}/.venv/bin/python",
             "args": [
+                "-m",
+                "pytest",
                 "-v"
             ],
             "problemMatcher": [],

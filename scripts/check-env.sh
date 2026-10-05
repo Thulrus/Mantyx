@@ -33,6 +33,12 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$PROJECT_ROOT"
 
+# shellcheck source=venv-health.sh
+source "$SCRIPT_DIR/venv-health.sh"
+
+VENV="$PROJECT_ROOT/.venv"
+VENV_PYTHON="$VENV/bin/python"
+
 echo "╔════════════════════════════════════════════════════════════╗"
 echo "║     Mantyx Environment Health Check                       ║"
 echo "╚════════════════════════════════════════════════════════════╝"
@@ -60,45 +66,44 @@ else
     fi
 fi
 
-# Check 2: Virtual environment
+# Check 2: Virtual environment health
 echo "Checking virtual environment..."
-if [ ! -d ".venv" ]; then
-    log_error "Virtual environment not found. Run: ./scripts/setup-dev.sh"
-    ((CHECKS_FAILED++))
-else
-    log_success "Virtual environment exists"
-    ((CHECKS_PASSED++))
-fi
-
-# Check 3: Virtual environment activation
-echo "Checking if virtual environment can be activated..."
-if [ -f ".venv/bin/activate" ]; then
-    source .venv/bin/activate
-    log_success "Virtual environment activated"
+VENV_PROBLEMS="$(venv_problems "$VENV")"
+VENV_OK=false
+if [ -z "$VENV_PROBLEMS" ]; then
+    log_success "Virtual environment is healthy ($("$VENV_PYTHON" --version))"
+    VENV_OK=true
     ((CHECKS_PASSED++))
 else
-    log_error "Cannot activate virtual environment"
+    while IFS= read -r problem; do
+        log_error "Virtual environment: $problem"
+    done <<< "$VENV_PROBLEMS"
+    log_info "Run: ./scripts/setup-dev.sh (it rebuilds the venv automatically)"
     ((CHECKS_FAILED++))
 fi
 
-# Check 4: Mantyx package installed
+# Remaining checks run through the venv's interpreter directly (not an
+# activated shell), so they test the venv itself rather than whatever happens
+# to be on PATH.
+
+# Check 3: Mantyx package installed
 echo "Checking Mantyx installation..."
-if python3 -c "import mantyx" 2>/dev/null; then
-    MANTYX_VERSION=$(python3 -c "import mantyx; print(getattr(mantyx, '__version__', '0.1.0'))")
+if [ "$VENV_OK" = true ] && "$VENV_PYTHON" -c "import mantyx" 2>/dev/null; then
+    MANTYX_VERSION=$("$VENV_PYTHON" -c "import mantyx; print(getattr(mantyx, '__version__', '0.1.0'))")
     log_success "Mantyx installed (version $MANTYX_VERSION)"
     ((CHECKS_PASSED++))
 else
-    log_error "Mantyx not installed. Run: pip install -e '.[dev]'"
+    log_error "Mantyx not installed in .venv. Run: ./scripts/setup-dev.sh"
     ((CHECKS_FAILED++))
 fi
 
-# Check 5: Development dependencies
+# Check 4: Development dependencies
 echo "Checking development dependencies..."
 MISSING_DEPS=()
 
-for dep in pytest black ruff pre-commit; do
-    if ! command -v $dep &> /dev/null; then
-        MISSING_DEPS+=($dep)
+for dep in pytest black ruff pre_commit; do
+    if [ "$VENV_OK" != true ] || ! "$VENV_PYTHON" -c "import $dep" &> /dev/null; then
+        MISSING_DEPS+=("${dep//_/-}")
     fi
 done
 
@@ -107,22 +112,23 @@ if [ ${#MISSING_DEPS[@]} -eq 0 ]; then
     ((CHECKS_PASSED++))
 else
     log_error "Missing tools: ${MISSING_DEPS[*]}"
-    log_info "Run: pip install -e '.[dev]'"
+    log_info "Run: ./scripts/setup-dev.sh"
     ((CHECKS_FAILED++))
 fi
 
-# Check 6: Pre-commit hooks installed
+# Check 5: Pre-commit hooks installed and pointing at this venv
 echo "Checking pre-commit hooks..."
-if [ -f ".git/hooks/pre-commit" ] && grep -q "pre-commit" .git/hooks/pre-commit 2>/dev/null; then
+HOOK_PROBLEMS="$(precommit_hook_problems "$VENV")"
+if [ -z "$HOOK_PROBLEMS" ]; then
     log_success "Pre-commit hooks installed"
     ((CHECKS_PASSED++))
 else
-    log_warning "Pre-commit hooks not installed"
-    log_info "Run: pre-commit install"
+    log_error "$HOOK_PROBLEMS"
+    log_info "Run: ./scripts/setup-dev.sh"
     ((CHECKS_FAILED++))
 fi
 
-# Check 7: Development directories
+# Check 6: Development directories
 echo "Checking development directories..."
 if [ -d "dev_data" ]; then
     log_success "Development data directory exists"
@@ -133,7 +139,7 @@ else
     ((CHECKS_FAILED++))
 fi
 
-# Check 8: Configuration files
+# Check 7: Configuration files
 echo "Checking configuration files..."
 MISSING_CONFIGS=()
 
@@ -151,7 +157,7 @@ else
     ((CHECKS_FAILED++))
 fi
 
-# Check 9: Test discovery
+# Check 8: Test discovery
 echo "Checking test discovery..."
 if [ -d "tests" ] && ls tests/test_*.py &> /dev/null; then
     TEST_COUNT=$(find tests -name "test_*.py" | wc -l)
@@ -162,9 +168,9 @@ else
     ((CHECKS_FAILED++))
 fi
 
-# Check 10: Quick import test
+# Check 9: Quick import test
 echo "Checking core module imports..."
-if python3 -c "from mantyx.config import get_settings; from mantyx.database import init_db" 2>/dev/null; then
+if [ "$VENV_OK" = true ] && "$VENV_PYTHON" -c "from mantyx.config import get_settings; from mantyx.database import init_db" 2>/dev/null; then
     log_success "Core modules import successfully"
     ((CHECKS_PASSED++))
 else
@@ -178,24 +184,23 @@ echo "╔═══════════════════════�
 echo "║     Results                                                ║"
 echo "╚════════════════════════════════════════════════════════════╝"
 echo ""
-echo "Checks passed: ${GREEN}$CHECKS_PASSED${NC}"
-echo "Checks failed: ${RED}$CHECKS_FAILED${NC}"
-echo ""
+echo -e "Checks passed: ${GREEN}$CHECKS_PASSED${NC}"
+echo -e "Checks failed: ${RED}$CHECKS_FAILED${NC}"
+echo -e ""
 
 if [ $CHECKS_FAILED -eq 0 ]; then
     log_success "Environment is healthy! ✨"
-    echo ""
-    echo "You're ready to develop! Try:"
-    echo "  ${BLUE}make run${NC}           - Start development server"
-    echo "  ${BLUE}make test${NC}          - Run tests"
-    echo "  ${BLUE}make format${NC}        - Format code"
+    echo -e ""
+    echo -e "You're ready to develop! Try:"
+    echo -e "  ${BLUE}make run${NC}           - Start development server"
+    echo -e "  ${BLUE}make test${NC}          - Run tests"
+    echo -e "  ${BLUE}make format${NC}        - Format code"
     exit 0
 else
     log_warning "Some checks failed. Please address the issues above."
-    echo ""
-    echo "Quick fixes:"
-    echo "  ${BLUE}./scripts/setup-dev.sh${NC}  - Run full setup"
-    echo "  ${BLUE}make dev${NC}                - Install dev dependencies"
-    echo "  ${BLUE}pre-commit install${NC}      - Install git hooks"
+    echo -e ""
+    echo -e "Quick fixes:"
+    echo -e "  ${BLUE}./scripts/setup-dev.sh${NC}             - Repair everything (rebuilds a broken venv)"
+    echo -e "  ${BLUE}./scripts/setup-dev.sh --recreate${NC}  - Rebuild the venv from scratch"
     exit 1
 fi

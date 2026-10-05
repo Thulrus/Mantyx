@@ -28,10 +28,53 @@ log_error() {
     echo -e "${RED}✗${NC} $1"
 }
 
+usage() {
+    cat <<EOF
+Usage: $0 [--recreate] [--all-hooks]
+
+Sets up the development environment, and repairs it if something is wrong.
+Safe to run any time; it only rebuilds what needs rebuilding.
+
+  --recreate    Delete and recreate .venv even if it looks healthy
+  --all-hooks   Also run every pre-commit hook on all files (slow)
+
+Environment:
+  PYTHON        Interpreter to build the venv with (default: python3)
+EOF
+}
+
+RECREATE=false
+RUN_ALL_HOOKS=false
+for arg in "$@"; do
+    case "$arg" in
+        --recreate) RECREATE=true ;;
+        --all-hooks) RUN_ALL_HOOKS=true ;;
+        -h|--help) usage; exit 0 ;;
+        *) log_error "Unknown option: $arg"; usage; exit 1 ;;
+    esac
+done
+
 # Get project root directory (parent of scripts directory)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$PROJECT_ROOT"
+
+# shellcheck source=venv-health.sh
+source "$SCRIPT_DIR/venv-health.sh"
+
+VENV="$PROJECT_ROOT/.venv"
+VENV_PYTHON="$VENV/bin/python"
+
+# Pick the base interpreter from outside .venv. In a terminal where the venv is
+# activated (VS Code does this automatically), `python3` would otherwise be
+# the very venv we may be about to delete.
+unset VIRTUAL_ENV
+PATH="$(printf '%s' "$PATH" | tr ':' '\n' | grep -vxF "$VENV/bin" | paste -sd: -)"
+export PATH
+PYTHON="${PYTHON:-python3}"
+if command -v "$PYTHON" &> /dev/null; then
+    PYTHON="$(command -v "$PYTHON")"
+fi
 
 echo "╔════════════════════════════════════════════════════════════╗"
 echo "║     Mantyx Development Environment Setup                  ║"
@@ -40,53 +83,70 @@ echo ""
 
 # Check Python version
 log_info "Checking Python version..."
-if ! command -v python3 &> /dev/null; then
-    log_error "Python 3 is not installed. Please install Python 3.10 or higher."
+if ! command -v "$PYTHON" &> /dev/null; then
+    log_error "$PYTHON is not installed. Please install Python 3.10 or higher."
     exit 1
 fi
 
-PYTHON_VERSION=$(python3 --version | cut -d' ' -f2)
-PYTHON_MAJOR=$(echo $PYTHON_VERSION | cut -d. -f1)
-PYTHON_MINOR=$(echo $PYTHON_VERSION | cut -d. -f2)
-
-if [ "$PYTHON_MAJOR" -lt 3 ] || ([ "$PYTHON_MAJOR" -eq 3 ] && [ "$PYTHON_MINOR" -lt 10 ]); then
-    log_error "Python 3.10 or higher is required. Found: $PYTHON_VERSION"
+if ! "$PYTHON" -c 'import sys; sys.exit(sys.version_info < (3, 10))'; then
+    log_error "Python 3.10 or higher is required. Found: $("$PYTHON" --version 2>&1)"
     exit 1
 fi
 
-log_success "Python $PYTHON_VERSION found"
+log_success "$("$PYTHON" --version) found ($(command -v "$PYTHON"))"
 
 # Check/Create virtual environment
 log_info "Checking virtual environment..."
-if [ ! -d ".venv" ]; then
-    log_info "Creating virtual environment..."
-    python3 -m venv .venv
-    log_success "Virtual environment created"
-else
-    log_success "Virtual environment exists"
+if [ "$RECREATE" = true ] && [ -d "$VENV" ]; then
+    log_warning "Recreating virtual environment (--recreate)"
+    rm -rf "$VENV"
+elif [ -d "$VENV" ]; then
+    PROBLEMS="$(venv_problems "$VENV")"
+    if [ -n "$PROBLEMS" ]; then
+        log_warning "Virtual environment is broken:"
+        while IFS= read -r problem; do
+            echo "    - $problem"
+        done <<< "$PROBLEMS"
+        log_info "Removing it so it can be rebuilt..."
+        rm -rf "$VENV"
+    else
+        log_success "Virtual environment is healthy"
+    fi
 fi
 
-# Activate virtual environment
-log_info "Activating virtual environment..."
-source .venv/bin/activate
+if [ ! -d "$VENV" ]; then
+    log_info "Creating virtual environment with $("$PYTHON" --version)..."
+    if ! "$PYTHON" -m venv "$VENV"; then
+        log_error "Could not create the virtual environment."
+        log_info "On Debian/Ubuntu you may need: sudo apt install python3-venv"
+        rm -rf "$VENV"
+        exit 1
+    fi
+    log_success "Virtual environment created"
+fi
+
+# Always go through the venv's interpreter (python -m ...) rather than
+# activating it or calling console scripts like bin/pip, so a half-broken
+# shell environment can't send commands to the wrong Python.
 
 # Upgrade pip
 log_info "Upgrading pip..."
-pip install --upgrade pip --quiet
+"$VENV_PYTHON" -m pip install --upgrade pip --quiet
 
 # Install dependencies
 log_info "Installing Mantyx with development dependencies..."
-pip install -e ".[dev]" --quiet
+"$VENV_PYTHON" -m pip install -e ".[dev]" --quiet
 log_success "Dependencies installed"
 
-# Install pre-commit hooks
+# Install pre-commit hooks. --overwrite rewrites a hook left behind by an old
+# or moved venv, which would otherwise make every `git commit` fail.
 log_info "Setting up pre-commit hooks..."
-if ! command -v pre-commit &> /dev/null; then
-    log_error "pre-commit not found in PATH after installation"
+"$VENV_PYTHON" -m pre_commit install --overwrite > /dev/null
+HOOK_PROBLEMS="$(precommit_hook_problems "$VENV")"
+if [ -n "$HOOK_PROBLEMS" ]; then
+    log_error "$HOOK_PROBLEMS"
     exit 1
 fi
-
-pre-commit install
 log_success "Pre-commit hooks installed"
 
 # Create development directories
@@ -94,19 +154,16 @@ log_info "Creating development directories..."
 mkdir -p dev_data/{apps,backups,config,data,logs,temp,venvs}
 log_success "Development directories created"
 
-# Run pre-commit on all files (optional, can be slow)
-read -p "Run pre-commit on all files now? This may take a while. (y/N) " -n 1 -r
-echo
-if [[ $REPLY =~ ^[Yy]$ ]]; then
+if [ "$RUN_ALL_HOOKS" = true ]; then
     log_info "Running pre-commit on all files..."
-    pre-commit run --all-files || log_warning "Some pre-commit checks failed. Review and fix before committing."
+    "$VENV_PYTHON" -m pre_commit run --all-files || log_warning "Some pre-commit checks failed. Review and fix before committing."
 else
-    log_info "Skipping pre-commit check. Run 'pre-commit run --all-files' manually when ready."
+    log_info "Skipping full pre-commit run (pass --all-hooks to include it)."
 fi
 
 # Run tests to verify setup
 log_info "Running tests to verify setup..."
-if pytest tests/ -v --tb=short; then
+if "$VENV_PYTHON" -m pytest tests/ -q --tb=short --no-cov; then
     log_success "All tests passed"
 else
     log_warning "Some tests failed. This might be expected for a fresh setup."
@@ -118,23 +175,23 @@ echo "║     Setup Complete! ✨                                     ║"
 echo "╚════════════════════════════════════════════════════════════╝"
 echo ""
 log_info "Development environment is ready!"
-echo ""
-echo "Next steps:"
-echo "  1. Activate the virtual environment:"
-echo "     ${BLUE}source .venv/bin/activate${NC}"
-echo ""
-echo "  2. Run the development server:"
-echo "     ${BLUE}make run${NC}"
-echo "     or"
-echo "     ${BLUE}python -m mantyx.cli run${NC}"
-echo ""
-echo "  3. Open the web interface:"
-echo "     ${BLUE}http://localhost:8420${NC}"
-echo ""
-echo "Useful commands:"
-echo "  ${BLUE}make help${NC}           - Show all available make targets"
-echo "  ${BLUE}make test${NC}           - Run tests"
-echo "  ${BLUE}make format${NC}         - Format code"
-echo "  ${BLUE}make pre-commit${NC}     - Run pre-commit hooks"
-echo "  ${BLUE}./scripts/check-env.sh${NC} - Check environment health"
-echo ""
+echo -e ""
+echo -e "Next steps:"
+echo -e "  1. Activate the virtual environment:"
+echo -e "     ${BLUE}source .venv/bin/activate${NC}"
+echo -e ""
+echo -e "  2. Run the development server:"
+echo -e "     ${BLUE}make run${NC}"
+echo -e "     or"
+echo -e "     ${BLUE}python -m mantyx.cli run${NC}"
+echo -e ""
+echo -e "  3. Open the web interface:"
+echo -e "     ${BLUE}http://localhost:8420${NC}"
+echo -e ""
+echo -e "Useful commands:"
+echo -e "  ${BLUE}make help${NC}           - Show all available make targets"
+echo -e "  ${BLUE}make test${NC}           - Run tests"
+echo -e "  ${BLUE}make format${NC}         - Format code"
+echo -e "  ${BLUE}make pre-commit${NC}     - Run pre-commit hooks"
+echo -e "  ${BLUE}./scripts/check-env.sh${NC} - Check environment health"
+echo -e ""
