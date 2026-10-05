@@ -338,6 +338,32 @@ def update_app_git(
     return TaskStartResponse(task_id=task.id, message="Update started")
 
 
+@router.post("/{app_id}/rebuild-venv", response_model=TaskStartResponse)
+def rebuild_app_venv(
+    app_id: int,
+    app_manager: AppManager = Depends(get_app_manager),
+    db: Session = Depends(get_db_session),
+):
+    """Delete and recreate an app's virtual environment, then reinstall its
+    requirements. Runs in the background; poll GET /apps/tasks/{task_id} for progress."""
+    app = db.query(App).filter(App.id == app_id).first()
+    if not app:
+        raise HTTPException(status_code=404, detail="App not found")
+    if app.is_deleted:
+        raise HTTPException(status_code=400, detail=f"App {app.name} is deleted")
+
+    task = task_manager.create(f"Rebuilding environment for {app.name}")
+    on_log = task_manager.logger_for(task.id)
+
+    def work():
+        result = app_manager.rebuild_app_venv(app_id, on_log=on_log)
+        task_manager.complete(task.id, result)
+
+    _run_task_in_background(task.id, work)
+
+    return TaskStartResponse(task_id=task.id, message="Rebuild started")
+
+
 @router.get("/{app_id}/check-git-update", response_model=GitUpdateCheckResponse)
 def check_git_update(
     app_id: int,

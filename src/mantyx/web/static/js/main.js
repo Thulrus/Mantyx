@@ -627,6 +627,18 @@ function getAppActions(app) {
     );
   }
 
+  // Rebuild venv (once dependencies have been installed at least once)
+  if (
+    app.state !== "deleted" &&
+    app.state !== "DELETED" &&
+    app.state !== "uploaded" &&
+    app.state !== "UPLOADED"
+  ) {
+    actions.push(
+      `<button class="btn btn-secondary btn-small" onclick="rebuildAppVenv(${app.id})">Rebuild Env</button>`,
+    );
+  }
+
   // Git update controls (for git-based apps that are not deleted)
   if (app.git_url && app.state !== "deleted" && app.state !== "DELETED") {
     if (app._updateAvailable === true) {
@@ -675,6 +687,36 @@ async function installApp(appId) {
           },
         ),
       "App installed successfully",
+    );
+    loadApps();
+  } catch (error) {
+    // Progress modal already shows the failure; just refresh state.
+    loadApps();
+  }
+}
+
+async function rebuildAppVenv(appId) {
+  if (
+    !confirm(
+      "Delete and recreate this app's Python environment, then reinstall its dependencies?\n\nThe app will be stopped during the rebuild and restarted afterwards if it was running.",
+    )
+  )
+    return;
+
+  try {
+    await runWithProgress(
+      "Rebuilding environment...",
+      () =>
+        fetch(`${API_BASE}/apps/${appId}/rebuild-venv`, {
+          method: "POST",
+        }).then(async (res) => {
+          if (!res.ok) {
+            const error = await res.json();
+            throw new Error(error.detail || "Rebuild failed to start");
+          }
+          return res.json();
+        }),
+      "Environment rebuilt successfully",
     );
     loadApps();
   } catch (error) {

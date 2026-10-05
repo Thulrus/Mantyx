@@ -160,6 +160,7 @@ cp .env.example .env
 | `MANTYX_MAX_UPLOAD_SIZE_MB`   | `100`         | Maximum upload size         |
 | `MANTYX_DEFAULT_MAX_RESTARTS` | `3`           | Max restart attempts        |
 | `MANTYX_LOG_RETENTION_DAYS`   | `30`          | Log retention period        |
+| `MANTYX_PIP_TIMEOUT`          | `900`         | pip install timeout (sec)   |
 
 ---
 

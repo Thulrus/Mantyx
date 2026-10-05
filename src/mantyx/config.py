@@ -9,7 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from pydantic import Field, field_validator
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -105,6 +105,15 @@ class Settings(BaseSettings):
     restart_window: int = Field(
         default=300,
         description="Time window for counting restarts (seconds)",
+    )
+
+    # Dependency installation
+    pip_timeout_seconds: int = Field(
+        default=900,
+        validation_alias=AliasChoices(
+            "MANTYX_PIP_TIMEOUT", "MANTYX_PIP_TIMEOUT_SECONDS", "pip_timeout_seconds"
+        ),
+        description="Timeout for pip install/upgrade runs in app venvs (seconds)",
     )
 
     # Health check settings

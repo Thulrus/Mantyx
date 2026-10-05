@@ -342,64 +342,99 @@ class AppManager:
 
             logger.info(f"App {app.name} disabled", app_id=app.id)
 
-    def update_app(self, app_id: int, new_source: Path, backup: bool = True) -> None:
-        """Update an app's source code."""
+    # -- updates ----------------------------------------------------------
+    #
+    # Both update paths follow the same order so a failure never leaves the app
+    # half-updated: stage the new source in a temp dir, install its requirements
+    # into the venv, and only then swap it in for the live source. Until the swap
+    # succeeds the live source is untouched, so rollback is just "don't swap" plus
+    # restarting the app if we stopped it.
+
+    def _staging_dir(self, app_name: str) -> Path:
+        """Fresh temp directory for staging an app's new source."""
+        staging_dir = self.settings.temp_dir / f"{app_name}_update"
+        if staging_dir.exists():
+            # Leftover from an interrupted update; never mix it into this one.
+            shutil.rmtree(staging_dir)
+        staging_dir.parent.mkdir(parents=True, exist_ok=True)
+        return staging_dir
+
+    def _stop_for_update(self, app_id: int) -> None:
         with get_db() as session:
             app = session.query(App).filter(App.id == app_id).first()
-            if not app:
-                raise ValueError(f"App {app_id} not found")
-
-            logger.info(f"Updating app {app.name}", app_id=app.id)
-
-            was_running = app.state == AppState.RUNNING
-
-            # Stop if running
-            if was_running:
+            if app:
                 self.supervisor.stop_app(app)
 
-            # Backup if requested
-            if backup:
-                self._backup_app(app.name)
+    def _install_staged_requirements(
+        self, app_name: str, staging_dir: Path, on_log: LogCallback | None
+    ) -> None:
+        """Install the *new* source's requirements before it goes live."""
+        requirements_file = staging_dir / "requirements.txt"
+        if requirements_file.exists():
+            logger.info(f"Installing dependencies for {app_name} from staged source")
+            self.venv_manager.install_requirements(app_name, requirements_file, on_log=on_log)
+        else:
+            logger.info(f"No requirements.txt found for {app_name}")
+            if on_log:
+                on_log("No requirements.txt found, skipping dependency install.")
 
-            # Replace source
-            source_dir = self._get_app_source_dir(app.name)
-            temp_dir = self.settings.temp_dir / f"{app.name}_update"
+    def _swap_in_source(self, source_dir: Path, staging_dir: Path) -> Path | None:
+        """Replace the live source with the staged one.
 
-            try:
-                # Extract new source to temp
-                temp_dir.mkdir(parents=True, exist_ok=True)
+        The old source is renamed aside rather than deleted, and returned so the
+        caller can restore it (_swap_back) or discard it once the update commits.
+        """
+        previous_dir = source_dir.with_name(f"{source_dir.name}.previous")
+        if previous_dir.exists():
+            shutil.rmtree(previous_dir)
 
-                with zipfile.ZipFile(new_source, "r") as zip_ref:
-                    zip_ref.extractall(temp_dir)
+        if source_dir.exists():
+            source_dir.rename(previous_dir)
+        else:
+            previous_dir = None
 
-                # Remove old source and move new
+        try:
+            shutil.move(str(staging_dir), str(source_dir))
+        except Exception:
+            # A cross-filesystem move may have left a partial copy behind.
+            if source_dir.exists():
                 shutil.rmtree(source_dir)
-                shutil.move(str(temp_dir), str(source_dir))
+            if previous_dir is not None:
+                previous_dir.rename(source_dir)
+            raise
 
-                # Reinstall dependencies
-                requirements_file = source_dir / "requirements.txt"
-                if requirements_file.exists():
-                    self.venv_manager.install_requirements(app.name, requirements_file)
+        return previous_dir
 
-                # Increment version
-                version_parts = app.version.split(".")
-                version_parts[-1] = str(int(version_parts[-1]) + 1)
-                app.version = ".".join(version_parts)
-                session.add(app)
+    def _swap_back(self, source_dir: Path, previous_dir: Path | None) -> None:
+        """Undo _swap_in_source, putting the previous source back in place."""
+        if previous_dir is None:
+            return
+        if source_dir.exists():
+            shutil.rmtree(source_dir)
+        previous_dir.rename(source_dir)
 
-                logger.info(f"App {app.name} updated successfully", app_id=app.id)
-
-            except Exception as e:
-                logger.error(f"Failed to update app {app.name}: {e}", app_id=app.id)
-                # TODO: Implement rollback from backup
-                raise
-            finally:
-                if temp_dir.exists():
-                    shutil.rmtree(temp_dir)
-
-        # Restart AFTER the session commits — otherwise the commit overwrites RUNNING.
-        if was_running:
+    def _restart_after_failed_update(
+        self, app_id: int, app_name: str, on_log: LogCallback | None
+    ) -> None:
+        """Best-effort restart of the previous version after a failed update."""
+        logger.info(f"Restarting {app_name} on its previous version after failed update")
+        if on_log:
+            on_log(f"Restarting {app_name} on its previous version...")
+        try:
             self.supervisor.start_app(app_id)
+        except Exception as e:
+            logger.error(f"Failed to restart {app_name} after failed update: {e}", app_id=app_id)
+            if on_log:
+                on_log(f"Failed to restart {app_name}: {e}")
+
+    @staticmethod
+    def _next_version(current: str, old_version: str) -> str:
+        version_parts = current.split(".")
+        if len(version_parts) == 3:
+            version_parts[-1] = str(int(version_parts[-1]) + 1)
+        else:
+            version_parts = [old_version, "1"]
+        return ".".join(version_parts)
 
     def update_app_from_zip(
         self,
@@ -408,7 +443,11 @@ class AppManager:
         backup: bool = True,
         on_log: LogCallback | None = None,
     ) -> dict[str, Any]:
-        """Update an app from a ZIP archive while preserving configuration."""
+        """Update an app from a ZIP archive while preserving configuration.
+
+        On failure the previous source stays live, the version is unchanged, and
+        the app is restarted if it was running.
+        """
         logger.info(f"Updating app {app_id} from ZIP: {zip_path}")
 
         self._validate_upload(zip_path)
@@ -423,27 +462,23 @@ class AppManager:
 
             app_name = app.name
             was_running = app.state == AppState.RUNNING
-            was_enabled = app.state == AppState.ENABLED
             old_version = app.version
 
-        # Stop the app if running
-        if was_running:
-            with get_db() as session:
-                app = session.query(App).filter(App.id == app_id).first()
-                self.supervisor.stop_app(app)
-
-        # Create backup if requested
-        if backup:
-            backup_dir = self._backup_app(app_name)
-            logger.info(f"Created backup at {backup_dir}")
-
         source_dir = self._get_app_source_dir(app_name)
-        temp_dir = self.settings.temp_dir / f"{app_name}_update"
+        staging_dir = self._staging_dir(app_name)
+        stopped = False
 
         try:
-            # Extract new source to temp directory
-            temp_dir.mkdir(parents=True, exist_ok=True)
+            if was_running:
+                self._stop_for_update(app_id)
+                stopped = True
 
+            if backup:
+                backup_dir = self._backup_app(app_name)
+                logger.info(f"Created backup at {backup_dir}")
+
+            # Extract new source to the staging directory
+            staging_dir.mkdir(parents=True)
             if on_log:
                 on_log(f"Extracting {zip_path.name}...")
 
@@ -452,76 +487,67 @@ class AppManager:
                 for member in zip_ref.namelist():
                     if member.startswith("/") or ".." in member:
                         raise ValueError(f"Invalid path in ZIP: {member}")
-                zip_ref.extractall(temp_dir)
+                zip_ref.extractall(staging_dir)
 
-            # Detect new entrypoint
-            new_entrypoint = self._detect_entrypoint(temp_dir)
+            new_entrypoint = self._detect_entrypoint(staging_dir)
 
-            # Remove old source and move new
-            if source_dir.exists():
-                shutil.rmtree(source_dir)
-            shutil.move(str(temp_dir), str(source_dir))
+            self._install_staged_requirements(app_name, staging_dir, on_log)
 
-            # Reinstall dependencies
-            requirements_file = source_dir / "requirements.txt"
-            if requirements_file.exists():
-                logger.info(f"Reinstalling dependencies for {app_name}")
-                self.venv_manager.install_requirements(app_name, requirements_file, on_log=on_log)
-            else:
-                logger.info(f"No requirements.txt found for {app_name}")
-                if on_log:
-                    on_log("No requirements.txt found, skipping dependency install.")
+            previous_dir = self._swap_in_source(source_dir, staging_dir)
+            try:
+                with get_db() as session:
+                    app = session.query(App).filter(App.id == app_id).first()
+                    app.version = self._next_version(app.version, old_version)
+                    app.entrypoint = new_entrypoint
+                    app.last_updated_at = datetime.now()
+                    app.update_count += 1
+                    session.add(app)
+                    session.commit()
+                    new_version = app.version
+            except Exception:
+                self._swap_back(source_dir, previous_dir)
+                raise
 
-            # Update app record
-            with get_db() as session:
-                app = session.query(App).filter(App.id == app_id).first()
-
-                # Increment version
-                version_parts = app.version.split(".")
-                if len(version_parts) == 3:
-                    version_parts[-1] = str(int(version_parts[-1]) + 1)
-                else:
-                    version_parts = [old_version, "1"]
-                app.version = ".".join(version_parts)
-
-                app.entrypoint = new_entrypoint
-                app.last_updated_at = datetime.now()
-                app.update_count += 1
-                session.add(app)
-                session.commit()
-
-                new_version = app.version
-
-            # Restart if it was running or enabled
-            if was_running:
-                self.supervisor.start_app(app_id)
-                logger.info(f"Restarted app {app_name} after update")
-
-            logger.info(
-                f"App {app_name} updated successfully from {old_version} to {new_version}",
-                app_id=app_id,
-            )
-
-            return {
-                "app_id": app_id,
-                "app_name": app_name,
-                "old_version": old_version,
-                "new_version": new_version,
-                "backup_created": backup,
-            }
+            if previous_dir is not None:
+                shutil.rmtree(previous_dir, ignore_errors=True)
 
         except Exception as e:
             logger.error(f"Failed to update app {app_name}: {e}", app_id=app_id)
-            # TODO: Implement rollback from backup
+            if on_log:
+                on_log(f"Update failed; keeping previous version {old_version}.")
+            if stopped:
+                self._restart_after_failed_update(app_id, app_name, on_log)
             raise
         finally:
-            if temp_dir.exists():
-                shutil.rmtree(temp_dir)
+            if staging_dir.exists():
+                shutil.rmtree(staging_dir)
+
+        if was_running:
+            self.supervisor.start_app(app_id)
+            logger.info(f"Restarted app {app_name} after update")
+
+        logger.info(
+            f"App {app_name} updated successfully from {old_version} to {new_version}",
+            app_id=app_id,
+        )
+
+        return {
+            "app_id": app_id,
+            "app_name": app_name,
+            "old_version": old_version,
+            "new_version": new_version,
+            "backup_created": backup,
+        }
 
     def pull_git_app(
         self, app_id: int, backup: bool = True, on_log: LogCallback | None = None
     ) -> dict[str, Any]:
-        """Pull latest changes from Git repository for an app."""
+        """Pull latest changes from Git repository for an app.
+
+        The pull happens in a staged copy of the repo, so on failure the previous
+        checkout stays live, the version is unchanged, and the app is restarted if
+        it was running.
+        """
         logger.info(f"Pulling Git updates for app {app_id}")
 
         with get_db() as session:
@@ -542,108 +568,141 @@ class AppManager:
             old_version = app.version
             was_running = app.state == AppState.RUNNING
 
-        # Stop the app if running
-        if was_running:
-            with get_db() as session:
-                app = session.query(App).filter(App.id == app_id).first()
-                if app:
-                    self.supervisor.stop_app(app)
-
-        # Create backup if requested
-        if backup:
-            backup_dir = self._backup_app(app_name)
-            logger.info(f"Created backup at {backup_dir}")
-
         source_dir = self._get_app_source_dir(app_name)
+        staging_dir = self._staging_dir(app_name)
+        stopped = False
+        changed = False
+        new_version = old_version
 
         try:
-            # Open the existing repo and pull
+            if was_running:
+                self._stop_for_update(app_id)
+                stopped = True
+
+            if backup:
+                backup_dir = self._backup_app(app_name)
+                logger.info(f"Created backup at {backup_dir}")
+
+            # Pull into a copy of the checkout so the live source stays intact
+            # until the new dependencies are installed.
+            shutil.copytree(source_dir, staging_dir, symlinks=True)
+
             if on_log:
                 on_log(f"Pulling {git_branch} from {git_url}...")
-            repo = Repo(source_dir)
+            repo = Repo(staging_dir)
             origin = repo.remotes.origin
             progress = _GitLogProgress(on_log) if on_log else None
             origin.pull(git_branch, progress=progress)
 
             new_commit = repo.head.commit.hexsha
+            repo.close()
 
-            # Check if anything actually changed
             if new_commit == old_commit:
                 logger.info(f"No changes detected for {app_name} (commit: {new_commit})")
+            else:
+                changed = True
+                self._install_staged_requirements(app_name, staging_dir, on_log)
 
-                # Restart if it was running
-                if was_running:
-                    self.supervisor.start_app(app_id)
+                new_entrypoint = self._detect_entrypoint(staging_dir)
 
-                return {
-                    "app_id": app_id,
-                    "app_name": app_name,
-                    "old_version": old_version,
-                    "new_version": old_version,
-                    "old_commit": old_commit or "",
-                    "new_commit": new_commit,
-                    "changed": False,
-                    "backup_created": backup,
-                }
+                previous_dir = self._swap_in_source(source_dir, staging_dir)
+                try:
+                    with get_db() as session:
+                        app = session.query(App).filter(App.id == app_id).first()
+                        if not app:
+                            raise ValueError(f"App {app_id} not found")
+                        app.version = self._next_version(app.version, old_version)
+                        app.git_commit = new_commit
+                        app.entrypoint = new_entrypoint
+                        app.last_updated_at = datetime.now()
+                        app.update_count += 1
+                        session.add(app)
+                        session.commit()
+                        new_version = app.version
+                except Exception:
+                    self._swap_back(source_dir, previous_dir)
+                    raise
 
-            # Reinstall dependencies in case they changed
-            requirements_file = source_dir / "requirements.txt"
-            if requirements_file.exists():
-                logger.info(f"Reinstalling dependencies for {app_name}")
-                self.venv_manager.install_requirements(app_name, requirements_file, on_log=on_log)
+                if previous_dir is not None:
+                    shutil.rmtree(previous_dir, ignore_errors=True)
 
-            # Detect entrypoint in case it changed
-            new_entrypoint = self._detect_entrypoint(source_dir)
+        except Exception as e:
+            logger.error(f"Failed to pull Git updates for {app_name}: {e}", app_id=app_id)
+            if on_log:
+                on_log(f"Update failed; keeping previous version {old_version}.")
+            if stopped:
+                self._restart_after_failed_update(app_id, app_name, on_log)
+            raise
+        finally:
+            if staging_dir.exists():
+                shutil.rmtree(staging_dir)
 
-            # Update app record
-            with get_db() as session:
-                app = session.query(App).filter(App.id == app_id).first()
-                if not app:
-                    raise ValueError(f"App {app_id} not found")
+        if was_running:
+            self.supervisor.start_app(app_id)
+            logger.info(f"Restarted app {app_name} after update")
 
-                # Increment version
-                version_parts = app.version.split(".")
-                if len(version_parts) == 3:
-                    version_parts[-1] = str(int(version_parts[-1]) + 1)
-                else:
-                    version_parts = [old_version, "1"]
-                app.version = ".".join(version_parts)
-
-                app.git_commit = new_commit
-                app.entrypoint = new_entrypoint
-                app.last_updated_at = datetime.now()
-                app.update_count += 1
-                session.add(app)
-                session.commit()
-
-                new_version = app.version
-
-            # Restart if it was running
-            if was_running:
-                self.supervisor.start_app(app_id)
-                logger.info(f"Restarted app {app_name} after update")
-
+        if changed:
             old_commit_short = old_commit[:8] if old_commit else "unknown"
             logger.info(
                 f"App {app_name} updated from commit {old_commit_short} to {new_commit[:8]}",
                 app_id=app_id,
             )
 
-            return {
-                "app_id": app_id,
-                "app_name": app_name,
-                "old_version": old_version,
-                "new_version": new_version,
-                "old_commit": old_commit or "",
-                "new_commit": new_commit,
-                "changed": True,
-                "backup_created": backup,
-            }
+        return {
+            "app_id": app_id,
+            "app_name": app_name,
+            "old_version": old_version,
+            "new_version": new_version,
+            "old_commit": old_commit or "",
+            "new_commit": new_commit,
+            "changed": changed,
+            "backup_created": backup,
+        }
 
+    def rebuild_app_venv(self, app_id: int, on_log: LogCallback | None = None) -> dict[str, Any]:
+        """Delete and recreate an app's venv, then reinstall its requirements.
+
+        The app is stopped for the rebuild and restarted afterwards if it was
+        running. If the rebuild fails the app is left stopped, since it can't run
+        without a working environment.
+        """
+        with get_db() as session:
+            app = session.query(App).filter(App.id == app_id).first()
+            if not app:
+                raise ValueError(f"App {app_id} not found")
+            if app.is_deleted:
+                raise ValueError(f"Cannot rebuild environment for deleted app {app.name}")
+
+            app_name = app.name
+            was_running = app.state == AppState.RUNNING
+
+        if was_running:
+            if on_log:
+                on_log(f"Stopping {app_name}...")
+            self._stop_for_update(app_id)
+
+        requirements_file = self._get_app_source_dir(app_name) / "requirements.txt"
+        try:
+            self.venv_manager.rebuild(
+                app_name,
+                requirements_file if requirements_file.exists() else None,
+                on_log=on_log,
+            )
         except Exception as e:
-            logger.error(f"Failed to pull Git updates for {app_name}: {e}", app_id=app_id)
-            # TODO: Implement rollback from backup
+            logger.error(f"Failed to rebuild venv for {app_name}: {e}", app_id=app_id)
+            if on_log and was_running:
+                on_log(f"Rebuild failed; {app_name} has been left stopped.")
             raise
+
+        if was_running:
+            if on_log:
+                on_log(f"Restarting {app_name}...")
+            self.supervisor.start_app(app_id)
+
+        logger.info(f"Rebuilt virtual environment for {app_name}", app_id=app_id)
+        if on_log:
+            on_log("Environment rebuilt.")
+        return {"app_id": app_id, "app_name": app_name}
 
     def check_git_update(self, app_id: int) -> dict[str, Any]:
         """Check whether the remote Git repository has new commits without modifying local files."""
@@ -714,7 +773,12 @@ class AppManager:
         """Create a backup of an app."""
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         backup_dir = self.settings.backups_dir / app_name / timestamp
-        backup_dir.mkdir(parents=True, exist_ok=True)
+        # Two updates within the same second would otherwise collide.
+        suffix = 1
+        while backup_dir.exists():
+            backup_dir = self.settings.backups_dir / app_name / f"{timestamp}_{suffix}"
+            suffix += 1
+        backup_dir.mkdir(parents=True)
 
         source_dir = self._get_app_source_dir(app_name)
         shutil.copytree(source_dir, backup_dir / "app")
