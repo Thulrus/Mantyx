@@ -2,17 +2,18 @@
 Main FastAPI application.
 """
 
-import signal
-import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
+from mantyx import __version__
 from mantyx.api import apps, backup, executions, schedules, settings
-from mantyx.config import get_settings
+from mantyx.config import get_settings, get_system_timezone
+from mantyx.core import runtime
 from mantyx.core.scheduler import AppScheduler
 from mantyx.core.supervisor import ProcessSupervisor
 from mantyx.database import init_db
@@ -27,68 +28,45 @@ supervisor: ProcessSupervisor | None = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Lifespan context manager for startup and shutdown."""
+    """Lifespan context manager for startup and shutdown.
+
+    Shutdown relies on uvicorn's own SIGINT/SIGTERM handling, which lets this
+    function's cleanup run. (A previous custom signal handler stopped the
+    event loop directly, which skipped cleanup entirely.)
+    """
     global scheduler, supervisor
 
-    # Startup
-    logger.info("Starting Mantyx...")
+    logger.info(f"Starting Mantyx {__version__}...")
 
     settings = get_settings()
     settings.ensure_directories()
 
-    # Initialize database
+    # Initialize database (also adds columns missing from older installs)
     init_db()
     logger.info("Database initialized")
 
-    # Start scheduler
-    scheduler = AppScheduler()
-    scheduler.start()
-    logger.info("Scheduler started")
-
-    # Start supervisor
     supervisor = ProcessSupervisor()
-    logger.info("Supervisor initialized")
+    scheduler = AppScheduler()
+    runtime.set_runtime(scheduler=scheduler, supervisor=supervisor)
 
-    # Auto-start perpetual apps that were running or enabled before shutdown
-    supervisor.adopt_running_apps()
+    # Close run records interrupted by the last shutdown, then bring back every
+    # always-running app that was running (or adopt it if it survived).
+    await run_in_threadpool(supervisor.reconcile_on_startup)
+    await run_in_threadpool(supervisor.adopt_running_apps)
 
-    # Register signal handlers.
-    # IMPORTANT: do NOT call sys.exit() inside a signal handler that fires while
-    # uvloop/asyncio is running — it raises SystemExit mid-coroutine, which leaves
-    # async generators in a "already running" state that prevents clean shutdown.
-    # Instead, schedule a stop on the running event loop so uvicorn can shut down
-    # naturally, which will trigger the lifespan `yield` to resume and run cleanup.
-    import asyncio
-
-    def signal_handler(signum, frame):
-        logger.info(f"Received signal {signum}, shutting down...")
-        try:
-            loop = asyncio.get_running_loop()
-            loop.call_soon_threadsafe(loop.stop)
-        except RuntimeError:
-            # No running loop (e.g. sync context) — safe to exit directly
-            if scheduler:
-                scheduler.stop()
-            if supervisor:
-                supervisor.cleanup()
-            sys.exit(0)
-
-    signal.signal(signal.SIGINT, signal_handler)
-    signal.signal(signal.SIGTERM, signal_handler)
-
+    scheduler.start()
     logger.info("Mantyx started successfully")
 
     yield
 
-    # Shutdown
     logger.info("Shutting down Mantyx...")
-
-    if scheduler:
-        scheduler.stop()
-
-    if supervisor:
-        supervisor.cleanup()
-
+    current_scheduler = runtime.get_scheduler()
+    current_supervisor = runtime.get_supervisor()
+    if current_scheduler:
+        current_scheduler.stop()
+    if current_supervisor:
+        await run_in_threadpool(current_supervisor.shutdown)
+    runtime.clear_runtime()
     logger.info("Mantyx shut down")
 
 
@@ -96,7 +74,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Mantyx",
     description="Python Application Orchestration Framework",
-    version="0.1.0",
+    version=__version__,
     lifespan=lifespan,
 )
 
@@ -118,7 +96,12 @@ async def root():
     """Serve the main web interface."""
     template_path = Path(__file__).parent / "web" / "index.html"
     if template_path.exists():
-        return template_path.read_text()
+        # Cache-bust static assets on every Mantyx version so browsers never
+        # keep running old JavaScript against a new API after a deploy.
+        return HTMLResponse(
+            template_path.read_text().replace("__MANTYX_VERSION__", _asset_version()),
+            headers={"Cache-Control": "no-cache"},
+        )
     return """
     <!DOCTYPE html>
     <html>
@@ -133,22 +116,37 @@ async def root():
     """
 
 
+def _asset_version() -> str:
+    """Changes whenever the bundled web assets change."""
+    static = Path(__file__).parent / "web" / "static"
+    newest = 0.0
+    for path in static.rglob("*"):
+        if path.is_file():
+            newest = max(newest, path.stat().st_mtime)
+    return f"{__version__}-{int(newest)}"
+
+
 @app.get("/health")
 async def health():
     """Health check endpoint."""
+    current = runtime.get_scheduler()
     return {
         "status": "healthy",
-        "scheduler_running": scheduler._scheduler.running if scheduler else False,
+        "scheduler_running": bool(current and current.running),
     }
 
 
 @app.get("/api/system/info")
 async def system_info():
     """Get system information."""
-    settings = get_settings()
+    from mantyx.core.scheduler import get_effective_timezone
+
+    current = runtime.get_scheduler()
     return {
-        "timezone": settings.timezone,
-        "version": "0.1.0",
+        "version": __version__,
+        "timezone": current.timezone if current else get_effective_timezone(),
+        "detected_timezone": get_system_timezone(),
+        "scheduler_running": bool(current and current.running),
     }
 
 
@@ -158,18 +156,28 @@ def run():
 
     settings = get_settings()
 
-    # Exclude dev_data directory from file watching to prevent reloads
-    # when apps install dependencies or create virtual environments
-    reload_excludes = ["dev_data/*"] if settings.debug else None
+    if settings.debug:
+        # Exclude dev_data directory from file watching to prevent reloads
+        # when apps install dependencies or create virtual environments
+        uvicorn.run(
+            "mantyx.app:app",
+            host=settings.host,
+            port=settings.port,
+            reload=True,
+            reload_excludes=["dev_data/*"],
+            log_level="debug",
+        )
+        return
 
-    uvicorn.run(
-        "mantyx.app:app",
-        host=settings.host,
-        port=settings.port,
-        reload=settings.debug,
-        reload_excludes=reload_excludes,
-        log_level="info" if not settings.debug else "debug",
+    class _Server(uvicorn.Server):
+        def handle_exit(self, sig, frame):
+            runtime.mark_shutting_down()
+            super().handle_exit(sig, frame)
+
+    config = uvicorn.Config(
+        "mantyx.app:app", host=settings.host, port=settings.port, log_level="info"
     )
+    _Server(config).run()
 
 
 if __name__ == "__main__":

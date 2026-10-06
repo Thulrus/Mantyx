@@ -79,12 +79,18 @@ def update_timezone(
             status_code=400, detail=f"Invalid timezone: {tz}. Must be a valid IANA timezone."
         )
 
-    # Save setting
+    # Save setting, then re-time every schedule in the new zone right away.
     set_setting(db, "timezone", tz, "System timezone for scheduling")
+
+    from mantyx.core import runtime
+
+    scheduler = runtime.get_scheduler()
+    if scheduler is not None:
+        scheduler.set_timezone(tz)
 
     return {
         "timezone": tz,
-        "message": "Timezone updated. Restart Mantyx to apply changes to schedules.",
+        "message": f"Schedules now run in {tz}.",
     }
 
 

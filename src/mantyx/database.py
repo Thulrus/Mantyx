@@ -5,7 +5,7 @@ Database session management and initialization.
 from collections.abc import Generator
 from contextlib import contextmanager
 
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -16,35 +16,80 @@ from mantyx.models.base import Base
 _engine: Engine | None = None
 _SessionLocal: sessionmaker[Session] | None = None
 
+# How long a SQLite connection waits for a competing writer before raising
+# "database is locked". Mantyx writes from several threads (API, scheduler,
+# supervisor monitor), so short lock waits are normal and must not error out.
+SQLITE_BUSY_TIMEOUT_SECONDS = 30
+
 
 def init_db() -> None:
-    """Initialize the database engine and create tables."""
+    """Initialize the database engine, create tables, and patch up older schemas."""
     global _engine, _SessionLocal
 
     settings = get_settings()
+    url = settings.effective_database_url
+    is_sqlite = url.startswith("sqlite")
 
-    # Enable foreign key support for SQLite
-    @event.listens_for(Engine, "connect")
-    def set_sqlite_pragma(dbapi_conn, connection_record):
-        if "sqlite" in settings.effective_database_url:
+    connect_args = {}
+    if is_sqlite:
+        connect_args = {"timeout": SQLITE_BUSY_TIMEOUT_SECONDS, "check_same_thread": False}
+
+    engine = create_engine(
+        url,
+        echo=settings.debug,
+        pool_pre_ping=True,
+        connect_args=connect_args,
+    )
+
+    if is_sqlite:
+        # Registered on this engine only (not the global Engine class), so
+        # re-initializing after a backup restore doesn't stack up listeners.
+        @event.listens_for(engine, "connect")
+        def _set_sqlite_pragma(dbapi_conn, connection_record):
             cursor = dbapi_conn.cursor()
             cursor.execute("PRAGMA foreign_keys=ON")
             cursor.close()
 
-    _engine = create_engine(
-        settings.effective_database_url,
-        echo=settings.debug,
-        pool_pre_ping=True,
-    )
+    _engine = engine
+    _SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-    _SessionLocal = sessionmaker(
-        autocommit=False,
-        autoflush=False,
-        bind=_engine,
-    )
+    # Create any missing tables, then add columns that older installs lack.
+    Base.metadata.create_all(bind=engine)
+    if is_sqlite:
+        ensure_schema(engine)
 
-    # Create all tables
-    Base.metadata.create_all(bind=_engine)
+
+# Columns added after the first release. create_all() never alters existing
+# tables, so installs created before these columns existed need them added.
+# Each entry: (table, column, SQL type/default, optional backfill statement).
+_ADDED_COLUMNS: list[tuple[str, str, str, str | None]] = [
+    ("apps", "last_updated_at", "DATETIME", None),
+    ("apps", "update_count", "INTEGER DEFAULT 0", None),
+    (
+        "apps",
+        "web_port_source",
+        "VARCHAR(20)",
+        # Links that existed before auto-detection were set by hand.
+        "UPDATE apps SET web_port_source = 'manual' "
+        "WHERE web_url IS NOT NULL OR web_port IS NOT NULL",
+    ),
+]
+
+
+def ensure_schema(engine: Engine) -> None:
+    """Idempotently add columns that older databases are missing.
+
+    Runs on every startup so a deploy never depends on migration scripts
+    having been run by hand against the right database.
+    """
+    with engine.begin() as conn:
+        for table, column, ddl, backfill in _ADDED_COLUMNS:
+            existing = {row[1] for row in conn.execute(text(f"PRAGMA table_info({table})"))}
+            if not existing or column in existing:
+                continue
+            conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}"))
+            if backfill:
+                conn.execute(text(backfill))
 
 
 def dispose_engine() -> None:

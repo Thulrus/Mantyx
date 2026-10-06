@@ -103,7 +103,7 @@ def test_zip_update_installs_new_requirements_before_swapping_source(instance, m
     assert (source_dir / "main.py").read_text() == "print('new')\n"
     assert result["new_version"] == "1.0.1"
     assert _get_app(app_id).version == "1.0.1"
-    manager.supervisor.start_app.assert_called_once_with(app_id)
+    manager.supervisor.start_app.assert_called_once_with(app_id, trigger_type="update")
     _assert_no_leftovers(instance)
 
 
@@ -123,7 +123,7 @@ def test_zip_update_dependency_failure_rolls_back(instance, manager, tmp_path):
     assert app.version == "1.0.0"
     assert app.update_count == 0
     manager.supervisor.stop_app.assert_called_once()
-    manager.supervisor.start_app.assert_called_once_with(app_id)
+    manager.supervisor.start_app.assert_called_once_with(app_id, trigger_type="update")
     assert any("keeping previous version 1.0.0" in line for line in logs)
     _assert_no_leftovers(instance)
     # The backup taken at the start of the update is still there.
@@ -159,7 +159,7 @@ def test_zip_update_failure_after_swap_restores_old_source(
 
     assert (source_dir / "main.py").read_text() == "print('old')\n"
     assert _get_app(app_id).version == "1.0.0"
-    manager.supervisor.start_app.assert_called_once_with(app_id)
+    manager.supervisor.start_app.assert_called_once_with(app_id, trigger_type="update")
     _assert_no_leftovers(instance)
 
 
@@ -220,7 +220,7 @@ def test_git_update_installs_new_requirements_before_swapping_source(instance, m
     app = _get_app(git_app["app_id"])
     assert app.version == "1.0.1"
     assert app.git_commit == git_app["new_commit"]
-    manager.supervisor.start_app.assert_called_once_with(git_app["app_id"])
+    manager.supervisor.start_app.assert_called_once_with(git_app["app_id"], trigger_type="update")
     _assert_no_leftovers(instance)
 
 
@@ -236,22 +236,83 @@ def test_git_update_dependency_failure_rolls_back(instance, manager, git_app):
     app = _get_app(git_app["app_id"])
     assert app.version == "1.0.0"
     assert app.git_commit == git_app["old_commit"]
-    manager.supervisor.start_app.assert_called_once_with(git_app["app_id"])
+    manager.supervisor.start_app.assert_called_once_with(git_app["app_id"], trigger_type="update")
     _assert_no_leftovers(instance)
 
 
-def test_git_update_without_new_commits_restarts_and_keeps_version(instance, manager, git_app):
+def test_git_update_without_new_commits_leaves_running_app_alone(instance, manager, git_app):
+    """No new commits: no stop, no restart, no backup, version unchanged."""
     manager.pull_git_app(git_app["app_id"])
-    manager.supervisor.start_app.reset_mock()
+    manager.supervisor.reset_mock()
     manager.venv_manager.install_requirements.reset_mock()
+    backups_before = list((instance.backups_dir / "demoapp").iterdir())
 
     result = manager.pull_git_app(git_app["app_id"])
 
     assert result["changed"] is False
     assert result["new_version"] == result["old_version"] == "1.0.1"
     manager.venv_manager.install_requirements.assert_not_called()
-    manager.supervisor.start_app.assert_called_once_with(git_app["app_id"])
+    manager.supervisor.stop_app.assert_not_called()
+    manager.supervisor.start_app.assert_not_called()
+    assert list((instance.backups_dir / "demoapp").iterdir()) == backups_before
     _assert_no_leftovers(instance)
+
+
+def test_zip_update_with_bad_zip_never_stops_app(instance, manager, tmp_path):
+    """Validation problems are caught before the running app is touched."""
+    _write_old_source(instance)
+    app_id = _make_app(state=AppState.RUNNING)
+    zip_path = tmp_path / "update.zip"
+    with ZipFile(zip_path, "w") as zf:
+        zf.writestr("README.md", "no python here\n")
+
+    with pytest.raises(ValueError, match="No Python entrypoint"):
+        manager.update_app_from_zip(app_id, zip_path)
+
+    manager.supervisor.stop_app.assert_not_called()
+    _assert_no_leftovers(instance)
+
+
+def test_zip_update_keeps_custom_entrypoint(instance, manager, tmp_path):
+    source_dir = _write_old_source(instance)
+    (source_dir / "worker.py").write_text("print('old worker')\n")
+    app_id = _make_app(state=AppState.STOPPED)
+    with get_db() as session:
+        session.query(App).filter(App.id == app_id).first().entrypoint = "worker.py"
+
+    zip_path = tmp_path / "update.zip"
+    with ZipFile(zip_path, "w") as zf:
+        zf.writestr("main.py", "print('new')\n")
+        zf.writestr("worker.py", "print('new worker')\n")
+
+    manager.update_app_from_zip(app_id, zip_path)
+
+    assert _get_app(app_id).entrypoint == "worker.py"
+
+
+def test_update_backups_can_be_listed_and_rolled_back(instance, manager, tmp_path):
+    source_dir = _write_old_source(instance)
+    app_id = _make_app(state=AppState.STOPPED)
+    manager.update_app_from_zip(app_id, _make_update_zip(tmp_path))
+    assert (source_dir / "main.py").read_text() == "print('new')\n"
+
+    backups = manager.list_backups(app_id)
+    assert len(backups) == 1
+    assert backups[0]["version"] == "1.0.0"
+
+    manager.restore_app_backup(app_id, backups[0]["id"])
+
+    assert (source_dir / "main.py").read_text() == "print('old')\n"
+    assert _get_app(app_id).version == "1.0.0"
+    # The version we rolled away from was saved too, so the rollback is undoable.
+    assert len(manager.list_backups(app_id)) == 2
+
+
+def test_restore_backup_rejects_path_traversal(instance, manager):
+    _write_old_source(instance)
+    app_id = _make_app(state=AppState.STOPPED)
+    with pytest.raises(ValueError):
+        manager.restore_app_backup(app_id, "../../etc")
 
 
 # ── Venv rebuild ─────────────────────────────────────────────────────────────

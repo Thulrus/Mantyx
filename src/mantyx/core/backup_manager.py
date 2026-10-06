@@ -17,6 +17,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from mantyx import __version__
 from mantyx.config import get_settings
 from mantyx.core.supervisor import ProcessSupervisor
 from mantyx.core.venv_manager import VenvManager
@@ -69,7 +70,7 @@ class BackupManager:
         self._snapshot_sqlite_db(self.settings.db_path, db_snapshot_path)
 
         manifest = {
-            "mantyx_version": "0.1.0",
+            "mantyx_version": __version__,
             "created_at": datetime.now().isoformat(),
             "app_count": app_count,
         }
@@ -106,13 +107,15 @@ class BackupManager:
         # Lazy import: mantyx.app mounts the router that imports this module,
         # so importing it at module scope would be circular.
         import mantyx.app as mantyx_app
+        from mantyx.core import runtime
 
         log("Stopping scheduler...")
-        if mantyx_app.scheduler is not None:
-            mantyx_app.scheduler.stop()
+        old_scheduler = runtime.get_scheduler() or mantyx_app.scheduler
+        if old_scheduler is not None:
+            old_scheduler.stop()
 
         log("Stopping running apps...")
-        supervisor = ProcessSupervisor()
+        supervisor = runtime.get_supervisor()
         with get_db() as session:
             running_apps = session.query(App).filter(App.state == AppState.RUNNING).all()
             session.expunge_all()
@@ -144,17 +147,18 @@ class BackupManager:
             log("Rebuilding virtual environments...")
             venv_errors = self._rebuild_venvs(on_log)
 
-            log("Restarting scheduler...")
             from mantyx.core.scheduler import AppScheduler
 
+            new_supervisor = ProcessSupervisor()
             new_scheduler = AppScheduler()
-            new_scheduler.start()
+            runtime.set_runtime(scheduler=new_scheduler, supervisor=new_supervisor)
             mantyx_app.scheduler = new_scheduler
+            mantyx_app.supervisor = new_supervisor
 
             log("Restarting apps...")
-            new_supervisor = ProcessSupervisor()
+            new_supervisor.reconcile_on_startup()
             new_supervisor.adopt_running_apps()
-            mantyx_app.supervisor = new_supervisor
+            new_scheduler.start()
 
             with get_db() as session:
                 restored_app_count = (

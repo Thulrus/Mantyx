@@ -36,7 +36,16 @@ class MantycLogger:
         app_id: int | None = None,
         execution_id: int | None = None,
     ) -> None:
-        """Write log entry to database."""
+        """Write log entry to database.
+
+        Only app-related events and warnings/errors are persisted: they feed
+        each app's activity feed in the UI. Everything else goes to stdout
+        (the journal under systemd) only, so the table doesn't balloon.
+        """
+        if app_id is None and level in (LogLevel.DEBUG, LogLevel.INFO):
+            return
+        if level == LogLevel.DEBUG:
+            return
         try:
             from mantyx.database import get_db
 

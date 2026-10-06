@@ -325,7 +325,21 @@ def test_restart_app_skips_stop_when_not_running(supervisor_env):
 
 
 def test_restart_app_increments_restart_count(supervisor_env):
-    """restart_app() increments the restart_count in the DB."""
+    """Automatic restarts increment restart_count (the crash budget)."""
+    env = supervisor_env
+    test_db = env["test_db"]
+    app_id = _make_app(test_db, state=AppState.ENABLED, restart_count=2)
+
+    supervisor = ProcessSupervisor()
+    with patch.object(supervisor, "stop_app"):
+        with patch.object(supervisor, "start_app", return_value=MagicMock()):
+            supervisor.restart_app(app_id, trigger_type="auto-restart")
+
+    db_app = _query_app(test_db, app_id)
+    assert db_app.restart_count == 3
+
+
+def test_manual_restart_does_not_use_crash_budget(supervisor_env):
     env = supervisor_env
     test_db = env["test_db"]
     app_id = _make_app(test_db, state=AppState.ENABLED, restart_count=2)
@@ -335,8 +349,7 @@ def test_restart_app_increments_restart_count(supervisor_env):
         with patch.object(supervisor, "start_app", return_value=MagicMock()):
             supervisor.restart_app(app_id)
 
-    db_app = _query_app(test_db, app_id)
-    assert db_app.restart_count == 3
+    assert _query_app(test_db, app_id).restart_count == 2
 
 
 # ── Fix 4: monitor_apps() – no nested-session race ───────────────────────────
@@ -363,7 +376,7 @@ def test_monitor_apps_exceeded_restarts_marks_app_failed(supervisor_env):
 
     db_app = _query_app(test_db, app_id)
     assert db_app.state == AppState.FAILED
-    assert db_app.last_error == "Exceeded maximum restart attempts"
+    assert db_app.last_error.startswith("Exceeded maximum restart attempts")
 
 
 def test_monitor_apps_restart_called_with_int_app_id(supervisor_env):
@@ -387,7 +400,7 @@ def test_monitor_apps_restart_called_with_int_app_id(supervisor_env):
     ):
         supervisor.monitor_apps()
 
-    mock_restart.assert_called_once_with(app_id)
+    mock_restart.assert_called_once_with(app_id, trigger_type="auto-restart")
 
 
 def test_monitor_apps_restart_failure_marks_app_failed_via_fresh_session(supervisor_env):
@@ -414,3 +427,107 @@ def test_monitor_apps_restart_failure_marks_app_failed_via_fresh_session(supervi
     db_app = _query_app(test_db, app_id)
     assert db_app.state == AppState.FAILED
     assert "start failed" in db_app.last_error
+
+
+# ── PID reuse protection ─────────────────────────────────────────────────────
+
+
+def _fake_process(cmdline):
+    proc = MagicMock()
+    proc.is_running.return_value = True
+    proc.status.return_value = psutil.STATUS_SLEEPING
+    proc.cmdline.return_value = cmdline
+    return proc
+
+
+def test_is_app_process_rejects_unrelated_process_with_reused_pid(tmp_path):
+    from mantyx.core import supervisor as supervisor_module
+
+    settings = MagicMock()
+    settings.venvs_dir = tmp_path / "venvs"
+    settings.apps_dir = tmp_path / "apps"
+    with (
+        patch.object(supervisor_module, "get_settings", return_value=settings),
+        patch("psutil.Process", return_value=_fake_process(["/usr/sbin/sshd", "-D"])),
+    ):
+        assert supervisor_module.is_app_process(4242, "testapp") is False
+
+    ours = [
+        str(tmp_path / "venvs" / "testapp" / "bin" / "python"),
+        str(tmp_path / "apps" / "testapp" / "app" / "main.py"),
+    ]
+    with (
+        patch.object(supervisor_module, "get_settings", return_value=settings),
+        patch("psutil.Process", return_value=_fake_process(ours)),
+    ):
+        assert supervisor_module.is_app_process(4242, "testapp") is True
+
+
+def test_adopt_app_starts_fresh_when_pid_belongs_to_another_program(supervisor_env):
+    env = supervisor_env
+    app_id = _make_app(env["test_db"], state=AppState.RUNNING, pid=4242)
+    app = _query_app(env["test_db"], app_id)
+
+    supervisor = ProcessSupervisor()
+    with (
+        patch("mantyx.core.supervisor.is_app_process", return_value=False),
+        patch.object(supervisor, "start_app") as mock_start,
+    ):
+        supervisor.adopt_app(app)
+
+    mock_start.assert_called_once_with(app_id, trigger_type="startup")
+    assert app_id not in supervisor._processes
+
+
+def test_stop_never_signals_a_process_that_is_not_the_app(supervisor_env):
+    env = supervisor_env
+    app_id = _make_app(env["test_db"], state=AppState.RUNNING, pid=4242)
+    app = _query_app(env["test_db"], app_id)
+
+    with (
+        patch("mantyx.core.supervisor.is_app_process", return_value=False),
+        patch("mantyx.core.supervisor.terminate_process_tree") as mock_kill,
+    ):
+        ProcessSupervisor().stop_app(app)
+
+    mock_kill.assert_not_called()
+    assert _query_app(env["test_db"], app_id).state == AppState.STOPPED
+
+
+def test_monitor_waits_out_restart_delay_after_recent_restart(supervisor_env):
+    from datetime import datetime
+
+    env = supervisor_env
+    test_db = env["test_db"]
+    app_id = _make_app(test_db, state=AppState.RUNNING, pid=99999, restart_policy="always")
+    session = test_db()
+    db_app = session.query(App).filter(App.id == app_id).first()
+    db_app.restart_delay = 60
+    db_app.last_restart_at = datetime.now()
+    session.commit()
+    session.close()
+
+    supervisor = ProcessSupervisor()
+    with (
+        patch("psutil.Process", side_effect=psutil.NoSuchProcess(99999)),
+        patch.object(supervisor, "restart_app") as mock_restart,
+    ):
+        supervisor.monitor_apps()
+
+    mock_restart.assert_not_called()
+    assert _query_app(test_db, app_id).last_error.startswith("Process exited unexpectedly")
+
+
+def test_monitor_does_nothing_while_mantyx_is_shutting_down(supervisor_env):
+    from mantyx.core import runtime
+
+    env = supervisor_env
+    _make_app(env["test_db"], state=AppState.RUNNING, pid=99999, restart_policy="always")
+    supervisor = ProcessSupervisor()
+    runtime.mark_shutting_down()
+    try:
+        with patch.object(supervisor, "restart_app") as mock_restart:
+            supervisor.monitor_apps()
+        mock_restart.assert_not_called()
+    finally:
+        runtime._shutting_down.clear()
