@@ -16,7 +16,7 @@ It isn't complete yet, but it's slowly getting better.
 
 ## Features
 
-- 🚀 **Full App Lifecycle Management** - Upload, install, enable, disable, and delete apps
+- 🚀 **Full App Lifecycle Management** - Add, start, stop, pause, update, roll back and delete apps
 - 📦 **Dependency Isolation** - Each app gets its own virtual environment
 - ⏰ **Flexible Scheduling** - Cron expressions and interval-based scheduling
 - 🔄 **Process Supervision** - Automatic restarts, health checks, and monitoring
@@ -189,54 +189,73 @@ cp .env.example .env
 
 ## Usage
 
-### Uploading an Application
+### Adding an application
 
-**Via Web Interface:**
+**Via the web interface:** click **Add app** and follow the three steps:
 
-1. Click "Upload App"
-2. Choose between ZIP upload or Git repository
-3. Fill in app details
-4. Upload and install
+1. **Source**: drop in a ZIP (a single enclosing folder is fine) or paste a Git URL.
+2. **Details**: a name, and how it should run: *Always running* or *On a schedule*.
+3. **Schedule / Finish**: pick when it runs (daily at a time, specific weekdays,
+   every N minutes, or a custom cron expression, with a preview of the next runs).
 
-**Via API:**
+Mantyx then uploads it, installs its dependencies, and starts it (or turns on its
+schedule) in one go, showing each step as it happens.
+
+**Via the API:**
 
 ```bash
-# Upload ZIP
+# Upload a ZIP, install it and start it in one request
 curl -X POST http://localhost:8420/api/apps/upload/zip \
   -F "file=@myapp.zip" \
   -F "app_name=my-app" \
-  -F "display_name=My Application"
+  -F "display_name=My Application" \
+  -F "install=true" -F "activate=true"
 
 # Clone from Git
 curl -X POST http://localhost:8420/api/apps/upload/git \
   -F "git_url=https://github.com/user/repo.git" \
   -F "app_name=my-app" \
-  -F "display_name=My Application"
+  -F "display_name=My Application" \
+  -F "install=true" -F "activate=true"
 ```
 
-### Managing Applications
+Both return a `task_id`; poll `GET /api/apps/tasks/{task_id}` for progress.
 
-1. **Install Dependencies:** Click "Install" after upload
-2. **Enable App:** Makes the app available to run
-3. **Start/Stop:** Control perpetual apps
-4. **Disable:** Stop app and prevent automatic starts
-5. **Delete:** Remove app and its data
+### Managing applications
 
-### Creating Schedules
+Every app shows one plain-English status (Running, Stopped, Failed, Scheduled,
+Last run failed, Paused, ...) with a short explanation of what's going on and the
+most useful next action. Open an app to see:
 
-For scheduled apps, create schedules via the API:
+- **Overview**: status, next/last run, web link, and recent activity
+- **Logs**: live output of the current run, or any earlier run
+- **Run history**: every run with its result, trigger and duration
+- **Schedules** (scheduled apps): add, edit, turn on/off, with next run times
+- **Settings**: name, file to run, environment variables (API keys etc.),
+  crash/restart behaviour, web link; plus Rebuild environment and Delete
+- **Versions**: update from a new ZIP or Git, and roll back to a saved version
+
+Always-running apps stay stopped once you stop them (even across Mantyx restarts)
+and are started again automatically when Mantyx restarts if they were running.
+
+### Schedules
+
+Schedules run in the timezone set under **Settings** (changes apply immediately).
+Via the API:
 
 ```bash
 curl -X POST http://localhost:8420/api/schedules \
   -H "Content-Type: application/json" \
   -d '{
     "app_id": 1,
-    "name": "Daily Backup",
+    "name": "Weekday mornings",
     "schedule_type": "cron",
-    "cron_expression": "0 2 * * *",
-    "timezone": "UTC"
+    "cron_expression": "30 7 * * mon-fri"
   }'
 ```
+
+Use day **names** (`mon-fri`, `sat,sun`) in cron expressions. If you use numbers,
+note that Mantyx's scheduler counts `0` as Monday, not Sunday.
 
 ---
 
@@ -283,8 +302,8 @@ persistent data storage, and the rules apps must follow. It's written to be
 easy for a human **or an AI coding agent** to follow when preparing an app
 for a Mantyx server.
 
-The same content is also available from the web UI via the **Deployment
-Guide** button in the header.
+A short version is also available from the web UI via the **Guide** button
+in the header.
 
 ---
 
@@ -298,12 +317,16 @@ Full API documentation is available at `/docs` when Mantyx is running.
 - `POST /api/apps/upload/zip` - Upload ZIP archive
 - `POST /api/apps/upload/git` - Clone from Git
 - `POST /api/apps/{id}/install` - Install dependencies
-- `POST /api/apps/{id}/enable` - Enable app
-- `POST /api/apps/{id}/start` - Start perpetual app
-- `POST /api/apps/{id}/stop` - Stop app
-- `DELETE /api/apps/{id}` - Delete app
-- `GET /api/executions` - List executions
-- `GET /api/schedules` - List schedules
+- `POST /api/apps/{id}/start` / `stop` / `restart` - Control an always-running app
+- `POST /api/apps/{id}/enable` / `disable` - Activate or pause a scheduled app
+- `POST /api/apps/{id}/run` - Run a scheduled app now
+- `POST /api/apps/{id}/update/zip` / `update/git` - Update (with automatic backup)
+- `GET /api/apps/{id}/backups` and `POST .../backups/{id}/restore` - Roll back
+- `DELETE /api/apps/{id}` - Delete an app and everything belonging to it
+- `GET /api/executions?app_id=` - Run history
+- `GET /api/executions/{id}/log?stream=stdout&offset=-1` - Read/follow a run's output
+- `POST /api/executions/{id}/cancel` - Stop an in-progress scheduled run
+- `GET /api/schedules` / `POST /api/schedules/preview` - Schedules and next run times
 
 ---
 

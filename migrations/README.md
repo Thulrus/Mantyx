@@ -4,8 +4,12 @@ This directory contains database migration scripts that are automatically run du
 
 ## How Migrations Work
 
-1. **Automatic in Development**: When you run Mantyx locally, SQLAlchemy's `create_all()` automatically adds new columns/tables
-2. **Automatic on Deploy**: The `deploy.sh` script automatically runs all migration scripts in this folder before restarting the service
+1. **Automatic at startup**: `create_all()` creates missing *tables*, and
+   `mantyx.database.ensure_schema()` adds the columns listed in `_ADDED_COLUMNS`
+   to existing tables. (`create_all()` never alters existing tables.) Every
+   column added after the first release must be listed there, so an upgraded
+   server works even if no migration script was run.
+2. **Automatic on Deploy**: The `deploy.sh` script also runs every script in this folder against the service's data directory before restarting the service
 3. **Idempotent**: All migrations check if changes are already applied before running
 
 ## Current Migrations
@@ -99,9 +103,8 @@ When you add new database fields or make schema changes:
 
 ## SQLAlchemy Auto-migration
 
-For most simple additions (new columns, new tables), you don't need manual migrations:
-
-- SQLAlchemy's `Base.metadata.create_all()` handles new columns automatically
+- New tables: handled by `Base.metadata.create_all()` at startup.
+- New nullable/defaulted columns: add them to `_ADDED_COLUMNS` in `src/mantyx/database.py`.
 - Use manual migrations for:
   - Data transformations
   - Column renames/deletions

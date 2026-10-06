@@ -213,7 +213,8 @@ If you're still stuck:
 4. Try running the app manually: `python app/main.py`
 5. Review the troubleshooting steps above
 
-For scheduled apps that should have run but didn't, check the scheduler debug panel:
+For scheduled apps that should have run but didn't:
 
-- Click the "🐛 Debug" button in the system info bar
-- Verify the schedule is enabled and shows a next run time
+- Open the app's **Schedules** tab and check the schedule is on and shows a next run time
+- Make sure the app itself isn't paused (its status would say "Paused")
+- **Settings → About → Scheduled jobs** lists every job the scheduler knows about

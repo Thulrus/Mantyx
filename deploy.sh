@@ -119,7 +119,9 @@ check_ssh() {
 
     # Check sudo access
     log_step "Checking sudo access..."
-    if ! ssh "${REMOTE_USER}@${REMOTE_HOST}" "sudo -n true" 2>/dev/null; then
+    # The sudoers rule below only allows systemctl/journalctl, so test with one
+    # of those (testing `sudo -n true` would always fail and re-prompt every deploy).
+    if ! ssh "${REMOTE_USER}@${REMOTE_HOST}" "sudo -n systemctl --version" >/dev/null 2>&1; then
         log_warn "Sudo requires password. Adding passwordless sudo access..."
         echo ""
         echo "Please enter your password when prompted to configure passwordless sudo."
@@ -181,6 +183,9 @@ deploy_update() {
     rsync -avz --delete \
         --exclude='.git/' --exclude='dev_data/' --exclude='.venv/' \
         --exclude='__pycache__/' --exclude='*.pyc' --exclude='mantyx_data/' \
+        --exclude='.pytest_cache/' --exclude='.ruff_cache/' --exclude='.mypy_cache/' \
+        --exclude='.coverage' --exclude='coverage.xml' --exclude='htmlcov/' \
+        --exclude='*.egg-info/' \
         ./ "${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_PATH}/"
 
     log_step "Updating dependencies..."
@@ -190,11 +195,19 @@ deploy_update() {
     # Run migrations if they exist
     if ssh "${REMOTE_USER}@${REMOTE_HOST}" "[ -d '${REMOTE_PATH}/migrations' ]"; then
         # Find all migration scripts and run them
+        # Run migrations with the same working directory and MANTYX_* settings as
+        # the service itself, so they always hit the database the service uses.
+        # (Mantyx also applies these schema additions itself at startup.)
         ssh "${REMOTE_USER}@${REMOTE_HOST}" "
+            WORKDIR=\$(systemctl show -p WorkingDirectory --value ${SERVICE_NAME} 2>/dev/null)
+            cd \"\${WORKDIR:-${REMOTE_PATH}}\" 2>/dev/null || cd '${REMOTE_PATH}' || exit 1
+            for kv in \$(systemctl show -p Environment --value ${SERVICE_NAME} 2>/dev/null); do
+                case \"\$kv\" in MANTYX_*=*) export \"\$kv\" ;; esac
+            done
             for migration in '${REMOTE_PATH}/migrations'/*.py; do
                 if [ -f \"\$migration\" ]; then
                     echo \"Running migration: \$(basename \$migration)\"
-                    '${REMOTE_PATH}/.venv/bin/python' \"\$migration\" || true
+                    '${REMOTE_PATH}/.venv/bin/python' \"\$migration\" || echo \"Migration \$(basename \$migration) failed (continuing; startup applies schema fixes)\"
                 fi
             done
         "

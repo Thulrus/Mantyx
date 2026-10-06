@@ -85,41 +85,32 @@ You should see the Mantyx dashboard with 0 apps.
    ```
 
 2. In the Mantyx web interface:
-   - Click "Upload App"
-   - Select "ZIP Upload" tab
-   - Choose the `hello-world.zip` file
-   - App Name: `hello-world`
-   - Display Name: `Hello World`
-   - Description: `Simple example application`
-   - Click "Upload"
+   - Click **Add app**
+   - Keep **Upload a ZIP** selected and drop in `hello-world.zip`
+   - Name: `Hello World` (the App ID `hello-world` is filled in for you)
+   - Choose **Always running**
+   - Leave **Start it right away** checked and click **Add app**
 
 ### Option B: Clone from Git
 
 1. In the Mantyx web interface:
-   - Click "Upload App"
-   - Select "Git Repository" tab
-   - Git URL: (your repository URL)
-   - Branch: `main`
-   - App Name: `my-app`
-   - Display Name: `My Application`
-   - Click "Clone & Upload"
+   - Click **Add app** and choose **Git repository**
+   - Repository URL: (your repository URL), Branch: `main`
+   - Fill in the name and choose how it should run
 
-## Step 5: Install and Run
+## Step 5: Watch It Run
 
-1. After upload, you'll see your app in "uploaded" state
-2. Click "Install" to create virtual environment and install dependencies
-3. Click "Enable" to enable the app
-4. For perpetual apps, click "Start" to begin execution
-5. Watch the app run! Check the dashboard for status updates
+Mantyx uploads the app, installs its dependencies and starts it, showing each
+step. When it's done, click **Open app**: the status banner explains what the app
+is doing, and the **Logs** tab shows its output live.
 
-## Step 6: View App Details
+## Step 6: Explore the App Page
 
-Click on any app card to see:
-
-- Current status and PID
-- Recent execution history
-- Configuration details
-- Schedules (if any)
+- **Overview**: status, web link and recent activity
+- **Run history**: every start/run with its result
+- **Schedules**: for scheduled apps, when it runs and when it runs next
+- **Settings**: environment variables, restart behaviour, Delete
+- **Versions**: update the app and roll back to an earlier version
 
 ## Creating Your Own App
 
